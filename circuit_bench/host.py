@@ -298,6 +298,8 @@ class Host:
                 os.killpg(p.pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
+        if p and p.stdout:
+            p.stdout.close()
         if self._log:
             self._log.close()
             self._log = None

@@ -92,6 +92,7 @@ additional tokens to add to the total. Partial coverage has no total estimate.
             else:
                 totals[key] += value
     return {'requests': len(rows), 'requestsWithUsage': observed,
+            'observedTokens': totals.copy(), 'requestsWithoutUsage': len(rows) - observed,
             **{k: None if k in unknown or not rows else v for k, v in totals.items()}}
 
 

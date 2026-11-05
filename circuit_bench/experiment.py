@@ -31,7 +31,9 @@ def prepare(spec, root, output):
     frozen={'schema':'circuit-agent-bench.experiment/v1','track':'unassisted',
         'model':{**model,'id':model_id},'question':spec.get('question'),
         'phase':spec.get('phase','development'),'repeats':repeats,
-        'verifier_image':spec['verifier_image'],'images':{},'tasks':{},'candidates':candidates}
+        'verifier_image':spec['verifier_image'],
+        'serviceFingerprint':hashlib.sha256(os.environ.get('VIBE_BENCH_BASE_URL','').rstrip('/').encode()).hexdigest() if os.environ.get('VIBE_BENCH_BASE_URL') else None,
+        'images':{},'tasks':{},'candidates':candidates}
     # Images are already built from selected tree/ref. Record their immutable IDs.
     for tag in {spec['verifier_image'],*(c['image'] for c in candidates)}:
         image=json.loads(subprocess.check_output(['docker','image','inspect',tag]))[0]
@@ -78,6 +80,9 @@ def run(output):
             raise ValueError('Image changed after experiment preparation: '+tag)
     for key in ('VIBE_BENCH_BASE_URL','VIBE_BENCH_API_KEY'):
         if not os.environ.get(key): raise ValueError('Missing '+key)
+    service = hashlib.sha256(os.environ['VIBE_BENCH_BASE_URL'].rstrip('/').encode()).hexdigest()
+    if frozen.get('serviceFingerprint') not in (None, service):
+        raise ValueError('Inference service differs from the prepared experiment')
     for job in frozen['jobs']:
         # Resume only unstarted jobs. Interrupted/failed attempts stay visible;
         # request another repeat to try again, not an overwrite.

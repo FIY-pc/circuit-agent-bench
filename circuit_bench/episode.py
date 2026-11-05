@@ -88,7 +88,10 @@ def execute(task, fixture, instruction, tree, output, *, model, effort, context_
                 'harness': identity, 'inputSha256': digest_tree(fixture),
                 'taskContractSha256': hashlib.sha256(json.dumps(task, sort_keys=True).encode()).hexdigest(),
                 'instructionSha256': hashlib.sha256(instruction.encode()).hexdigest(),
-                'adapterSha256': sha(__file__)}
+                'adapterSha256': sha(__file__),
+                'adapterFiles': {name: sha(Path(__file__).parent / name)
+                    for name in ('episode.py','runner.py','host.py','meter.py')},
+                'serviceFingerprint': hashlib.sha256(base.rstrip('/').encode()).hexdigest()}
     (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
     with MeterProxy(base, key, output / 'request-events.jsonl') as proxy:
         service = {'id': 'bench', 'name': 'bench', 'baseUrl': proxy.url, 'apiKey': 'local-proxy',

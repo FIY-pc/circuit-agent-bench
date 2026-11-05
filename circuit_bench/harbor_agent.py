@@ -26,7 +26,7 @@ class VibeLogisim(BaseInstalledAgent):
         return 'vibe-logisim'
 
     async def install(self, environment):
-        await self.exec_as_agent(environment, 'test -f /opt/product/crates/workbench-host/Cargo.toml && test -f /workspace/task.json')
+        await self.exec_as_agent(environment, 'test -f /workspace/task.json && python3 -m circuit_bench.preflight', cwd='/opt/bench')
 
     async def run(self, instruction, environment, context):
         if not self.model_name:

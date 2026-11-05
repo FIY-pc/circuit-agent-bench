@@ -11,7 +11,7 @@ import tempfile
 from circuit_bench.episode import sha, source_identity
 from circuit_bench.host import Tree
 
-RUNTIME_MODULES = ('__init__.py', 'host.py', 'runner.py', 'episode.py', 'meter.py')
+RUNTIME_MODULES = ('__init__.py', 'host.py', 'runner.py', 'episode.py', 'meter.py', 'preflight.py')
 
 
 def snapshot(tree, destination):
@@ -75,7 +75,7 @@ def build(tree, tag, *, role='agent', base='ubuntu:24.04', network=None):
             if role == 'verifier' or path.name in RUNTIME_MODULES:
                 shutil.copy2(path, adapter / path.name)
         dockerfile = f'''FROM {base}
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 openjdk-21-jdk-headless ca-certificates fontconfig fonts-dejavu-core fonts-noto-cjk libstdc++6 git curl tar bash && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 openjdk-21-jdk-headless ca-certificates fontconfig fonts-dejavu-core fonts-noto-cjk libharfbuzz0b libstdc++6 git curl tar bash && rm -rf /var/lib/apt/lists/*
 COPY node /usr/local/bin/node
 COPY host /usr/local/bin/vibe-workbench-host
 COPY product /opt/product
@@ -92,6 +92,8 @@ USER agent
             cmd.extend(['--network', network])
         cmd.append(str(context))
         subprocess.run(cmd, check=True)
+    subprocess.run(['docker','run','--rm','--memory','4g','--network','none',tag,
+                    'python3','-m','circuit_bench.preflight'],check=True)
     image = json.loads(subprocess.check_output(['docker', 'image', 'inspect', tag]))[0]
     return {'image': tag, 'imageId': image['Id'], 'role': role, 'harness': identity,
             'nodeSha256': sha(node), 'base': base}
