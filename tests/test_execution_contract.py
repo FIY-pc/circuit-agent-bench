@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from circuit_bench.package import package
-from circuit_bench.runner import run_episode
+from circuit_bench.adapters.vibe_logisim.runner import run_episode
 from circuit_bench.meter import usage_totals
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -31,7 +31,7 @@ class ExecutionContract(unittest.TestCase):
             def describe(self):return {'commit':'fixed'}
         service={'id':'bench','model':'example','effort':'high','api':'openai-completions',
                  'apiKey':'local-proxy','baseUrl':'http://localhost:1/v1'}
-        with tempfile.TemporaryDirectory() as temp,patch('circuit_bench.runner.Host',BrokenHost):
+        with tempfile.TemporaryDirectory() as temp,patch('circuit_bench.adapters.vibe_logisim.runner.Host',BrokenHost):
             out=Path(temp)/'trial'
             task=json.loads((ROOT/'tasks/full-adder/task.json').read_text())
             task['prompt']='Build the circuit.'

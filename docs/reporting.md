@@ -78,8 +78,8 @@ These are descriptive comparisons of whole harnesses under matched observed cond
 systemd-run --user --scope -q -p MemoryMax=8G timeout 900 \
   python -m unittest discover -s tests -p test_visual_review_report.py -v
 # Add a real sequential native-render test with the fixed product:
-export VIBE_BENCH_NATIVE_TREE=/path/to/fixed/product
-# Set VIBE_BENCH_HOST and VIBE_LOGISIM_NODE as in visual-scoring.md, then repeat.
+export CIRCUIT_BENCH_NATIVE_TREE=/path/to/fixed/product
+# Set CIRCUIT_BENCH_HOST and CIRCUIT_BENCH_NODE as in visual-scoring.md, then repeat.
 ```
 
 The tests cover reachability, wide canvases, library-file identity, source immutability, omitted/error views, review integrity, failure/unknown accounting, privacy allowlisting, paired-condition mismatches, duplicate pair attempts, recursive Harbor discovery, exceptions and missing scheduled trials. Synthetic/scripted tests verify infrastructure, not real-model construction ability or human calibration.

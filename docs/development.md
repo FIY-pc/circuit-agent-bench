@@ -1,13 +1,20 @@
 # Module contracts
 
-`circuit_bench.host.Tree.resolve(tree, ref)` selects the product. `Host(Tree)` provides call(op, **args), agent(method, **args), events().
+The shared layer contains `identity`, `experiment`, `package`, `meter`, task
+oracles, reports and human review. `adapters/vibe_logisim/` contains source
+selection/building, product HTTP/SSE, provider setup, turn execution and native
+transcript retention. `grading` and `visual` currently use that adapter's native
+host as their fixed Logisim backend; they never invoke its agent. A second
+simulator is not implemented. See [adapter contracts](adapters.md).
+
+`circuit_bench.adapters.vibe_logisim.host.Tree.resolve(tree, ref)` selects the product. `Host(Tree)` provides call(op, **args), agent(method, **args), events().
 `circuit_bench.grading.Grader(Tree).grade(task_directory, artifact_path)` returns an independent functional report. `grade(...)` is the one-shot equivalent. Native reference circuits are verifier regressions, never visible to the agent.
 Task directories: instruction.md (entire user request), task.json (id/artifact/circuit/timeout_minutes), environment/input/ (starting project), tests/oracle.json (independent specification), tests/reference.circ (regression answer).
-`circuit_bench.episode.execute` invokes the actual product agent unchanged. Formal runs expose only instruction and input; evaluator code/references remain outside the agent filesystem.
+`circuit_bench.adapters.vibe_logisim.episode.execute` invokes the actual product agent unchanged. Formal runs expose only instruction and input; evaluator code/references remain outside the agent filesystem.
 Results: manifest.json, run.json (outcome/elapsedMs/ledger/meter), requests.jsonl, events.jsonl, result/ containing saved project. Functional grade.json and visual evidence are generated independently afterwards.
 
 Episode retention: the live local project is `result/`. Harbor sets
-`VIBE_BENCH_PROJECT_DIR=/logs/artifacts/project`, which is collected even if the
+`CIRCUIT_BENCH_PROJECT_DIR=/logs/artifacts/project`, which is collected even if the
 episode is killed; normal cleanup also copies it into the episode's `result/`.
 `run.json` starts with `outcome=running` and `finalized=false`. SIGINT/SIGTERM
 finalize it as interrupted. Harbor requests termination and recovery before

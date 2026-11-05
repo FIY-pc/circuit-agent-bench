@@ -1,4 +1,4 @@
-"""Prepare a fixed-model experiment and let Harbor schedule the trials."""
+"""Prepare a circuit experiment with an explicit harness and let Harbor schedule trials."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -8,8 +8,9 @@ from pathlib import Path
 import subprocess
 import shutil
 import sys
-from circuit_bench.episode import digest_tree, sha
+from circuit_bench.identity import digest_tree, sha
 from circuit_bench.package import package
+from circuit_bench.adapters import agent_config, required_environment
 
 
 def prepare(spec, root, output):
@@ -19,11 +20,9 @@ def prepare(spec, root, output):
         raise ValueError('Use a new experiment output directory; previous attempts are never replaced')
     if spec.get('track','unassisted') != 'unassisted':
         raise ValueError('Human-assisted runs need a separate recorded protocol; this runner is unassisted')
-    model=spec['model']; model_id=model.get('id') or os.environ.get('VIBE_BENCH_MODEL')
-    if not model_id or int(model['context_window'])<=0:
+    model=spec['model']; model_id=model.get('id') or os.environ.get('CIRCUIT_BENCH_MODEL')
+    if not model_id or type(model.get('context_window')) is not int or model['context_window']<=0:
         raise ValueError('Exact model ID and context window are required')
-    if model.get('api') == 'anthropic-messages' and model.get('max_output') is None:
-        raise ValueError('Messages requires the actual model-supported max_output capacity')
     if model.get('max_output') is not None and (type(model['max_output']) is not int or model['max_output'] <= 0):
         raise ValueError('max_output must be a positive integer')
     candidates=spec['candidates']; tasks=spec['tasks']; repeats=spec.get('repeats',1)
@@ -31,12 +30,14 @@ def prepare(spec, root, output):
         raise ValueError('Supply distinct tasks, candidates, and positive repeats')
     if len({c['id'] for c in candidates})!=len(candidates):
         raise ValueError('Candidate IDs must be unique')
+    resolved_agents = {c['id']: agent_config(c, {**model, 'id': model_id}) for c in candidates}
+    required_env = sorted({key for c in candidates for key in required_environment(c)})
     output.mkdir(parents=True)
     frozen={'schema':'circuit-agent-bench.experiment/v1','track':'unassisted',
         'model':{**model,'id':model_id},'question':spec.get('question'),
         'phase':spec.get('phase','development'),'repeats':repeats,
-        'verifier_image':spec['verifier_image'],
-        'serviceFingerprint':hashlib.sha256(os.environ.get('VIBE_BENCH_BASE_URL','').rstrip('/').encode()).hexdigest() if os.environ.get('VIBE_BENCH_BASE_URL') else None,
+        'verifier_image':spec['verifier_image'], 'required_env': required_env,
+        'serviceFingerprint':hashlib.sha256(os.environ.get('CIRCUIT_BENCH_BASE_URL','').rstrip('/').encode()).hexdigest() if 'CIRCUIT_BENCH_BASE_URL' in required_env and os.environ.get('CIRCUIT_BENCH_BASE_URL') else None,
         'images':{},'tasks':{},'candidates':candidates}
     # Images are already built from selected tree/ref. Record their immutable IDs.
     for tag in {spec['verifier_image'],*(c['image'] for c in candidates)}:
@@ -61,11 +62,7 @@ def prepare(spec, root, output):
                 config={'job_name':name,'jobs_dir':str((output/'jobs').resolve()),
                     'n_attempts':1,'n_concurrent_trials':1,'retry':{'max_retries':0},
                     'tasks':[{'path':str(task_out.resolve())}],
-                    'agents':[{'import_path':'circuit_bench.harbor_agent:VibeLogisim',
-                        'model_name':model_id,'skip_model_parsing':True,
-                        'kwargs':{'context_window':int(model['context_window']),
-                                  'effort':model['effort'],'api':model.get('api','openai-completions'),
-                                  **({'max_output':model['max_output']} if model.get('max_output') is not None else {})}}]}
+                    'agents':[resolved_agents[alias]]}
                 validated=JobConfig.model_validate(config)
                 target=output/'jobs-config'/f'{name}.json';target.parent.mkdir(exist_ok=True)
                 target.write_text(validated.model_dump_json(indent=2))
@@ -94,9 +91,9 @@ def run(output):
         image=json.loads(subprocess.check_output(['docker','image','inspect',tag]))[0]
         if image['Id']!=expected:
             raise ValueError('Image changed after experiment preparation: '+tag)
-    for key in ('VIBE_BENCH_BASE_URL','VIBE_BENCH_API_KEY'):
+    for key in frozen.get('required_env', ('CIRCUIT_BENCH_BASE_URL','CIRCUIT_BENCH_API_KEY')):
         if not os.environ.get(key): raise ValueError('Missing '+key)
-    service = hashlib.sha256(os.environ['VIBE_BENCH_BASE_URL'].rstrip('/').encode()).hexdigest()
+    service = hashlib.sha256(os.environ.get('CIRCUIT_BENCH_BASE_URL','').rstrip('/').encode()).hexdigest()
     if frozen.get('serviceFingerprint') not in (None, service):
         raise ValueError('Inference service differs from the prepared experiment')
     for job in frozen['jobs']:
@@ -113,7 +110,7 @@ def run(output):
         if not harbor.is_file():
             raise ValueError('Install the harbor extra into this Python environment')
         result=subprocess.run([str(harbor),'run','--config',job['config']],
-                              env={**os.environ,'PYTHONPATH':str(Path(__file__).resolve().parents[1]),'LITELLM_LOCAL_MODEL_COST_MAP':'True'})
+                              env={**os.environ,'PYTHONPATH':os.pathsep.join(filter(None, (str(Path(__file__).resolve().parents[1]), os.environ.get('PYTHONPATH')))),'LITELLM_LOCAL_MODEL_COST_MAP':'True'})
         with (output/'launches.jsonl').open('a') as f:
             f.write(json.dumps({'job':job['name'],'exit_code':result.returncode})+'\n')
     return frozen

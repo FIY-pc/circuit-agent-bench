@@ -29,7 +29,7 @@ class VibeLogisim(BaseInstalledAgent):
         return 'vibe-logisim'
 
     async def install(self, environment):
-        await self.exec_as_agent(environment, 'test -f /workspace/task.json && python3 -m circuit_bench.preflight', cwd='/opt/bench')
+        await self.exec_as_agent(environment, 'test -f /workspace/task.json && python3 -m circuit_bench.adapters.vibe_logisim.preflight', cwd='/opt/bench')
 
     async def run(self, instruction, environment, context):
         if not self.model_name:
@@ -38,7 +38,7 @@ class VibeLogisim(BaseInstalledAgent):
             path = Path(temp) / 'instruction.md'
             path.write_text(instruction)
             await environment.upload_file(path, '/workspace/instruction.md')
-        command = ['python3', '-m', 'circuit_bench.episode', '--task', '/workspace/task.json',
+        command = ['python3', '-m', 'circuit_bench.adapters.vibe_logisim.episode', '--task', '/workspace/task.json',
                    '--instruction', '/workspace/instruction.md', '--input', '/workspace/input',
                    '--tree', '/opt/product', '--output', '/logs/agent/episode',
                    '--model', self.model_name, '--effort', self.effort,
@@ -47,8 +47,8 @@ class VibeLogisim(BaseInstalledAgent):
             command += ['--max-output', str(self.max_output)]
         # Environment is passed through Harbor's scoped execution, not written
         # into a task, Dockerfile, job YAML or a product authentication profile.
-        env = {k: os.environ[k] for k in ('VIBE_BENCH_BASE_URL', 'VIBE_BENCH_API_KEY')}
-        env['VIBE_BENCH_PROJECT_DIR'] = '/logs/artifacts/project'
+        env = {k: os.environ[k] for k in ('CIRCUIT_BENCH_BASE_URL', 'CIRCUIT_BENCH_API_KEY')}
+        env['CIRCUIT_BENCH_PROJECT_DIR'] = '/logs/artifacts/project'
         try:
             await self.exec_as_agent(environment, ' '.join(map(shlex.quote, command)),
                                      env=env, cwd='/opt/bench')
@@ -59,7 +59,7 @@ class VibeLogisim(BaseInstalledAgent):
             failure = sys.exc_info()[1]
             try:
                 await asyncio.shield(self.exec_as_agent(environment,
-                    'python3 -m circuit_bench.retention --interrupt /logs/agent/episode',
+                    'python3 -m circuit_bench.adapters.vibe_logisim.retention --interrupt /logs/agent/episode',
                     cwd='/opt/bench', timeout_sec=45))
             except Exception:
                 if failure is None:

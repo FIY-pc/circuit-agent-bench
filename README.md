@@ -6,18 +6,25 @@ Evaluate a real model and its agent harness by having them **build working digit
 circuits**. Tasks range from a full adder through modules and processors. Results
 separate functional correctness, visual readability and execution cost.
 
-The runtime adapter launches Vibe Logisim unchanged. Harbor manages isolated
-trials and a separate verifier. Each run starts from a fresh project; the verifier
-reopens the saved artifact with its own fixed product version. Neither reference
-circuits nor grading code are present in the agent image.
+Tasks, scoring and experiment records are independent of the candidate harness.
+To study models, keep the harness fixed and vary the model. To study a harness,
+keep the model fixed and vary the implementation. State both in every result.
 
-## Start a run
+Harbor manages isolated trials and a separate verifier. Included adapters run
+the stock Pi coding-agent CLI or Vibe Logisim; other agents use Harbor's existing agent
+interface. The current task set delivers Logisim `.circ` files, and the independent
+verifier uses a fixed native Logisim backend. That artifact/runtime requirement
+does not require the candidate to use Vibe Logisim. Reference circuits and grading
+code are absent from the agent image. See [integrations](docs/adapters.md).
+
+## Prepare the environment
 
 The verified host platform is Linux with Docker. Windows users can use a Linux
 WSL2 environment with Docker integration; that route has not yet been exercised.
-You need Python 3.12+, Node 24+, the product's Rust toolchain, JDK 17+ and Docker.
-A prepared local Vibe Logisim checkout can be used directly. A tag/commit can be
-fetched and prepared in the cache without changing that checkout.
+You need Python 3.12+, Node 24+, npm and Docker. Building the Vibe candidate or the
+native verifier also needs the product's Rust toolchain and JDK 17+. A prepared
+product checkout can be used directly, or a tag/commit can be fetched and prepared
+in the cache without changing that checkout.
 
 Install the pinned Harbor environment from this repository root:
 
@@ -27,15 +34,33 @@ uv pip install --python .venv/bin/python -r requirements.lock
 source .venv/bin/activate
 ```
 
-Build a candidate image and an independently pinned verifier image. `--tree`
+## Choose a candidate and build the verifier
+
+For a generic coding-agent baseline, build the pinned **Pi 1.5.0 CLI**. It uses
+its own prompt, file/shell tools, retries and compaction; this candidate contains
+no Vibe product or circuit-editing API. A pinned stock Logisim CLI is available
+through its shell. See [Pi baseline](docs/pi-baseline.md).
+
+```sh
+python -m circuit_bench image --adapter pi --tag circuit-agent:pi \
+  --manifest .cache/pi-image.json
+```
+
+For a Vibe Logisim candidate, use `--adapter vibe-logisim`. `--tree`
 measures current tracked file contents, including staged/unstaged edits. Stage
 new source files first. `--ref` fetches a tag or commit from the product repository.
 Images are local; these commands do not push them.
 
 ```sh
-python -m circuit_bench image --tree /path/to/vibe-logisim \
+python -m circuit_bench image --adapter vibe-logisim --tree /path/to/vibe-logisim \
   --tag circuit-agent:baseline --manifest .cache/candidate.json
-python -m circuit_bench image --ref v26.11.2 --role verifier \
+```
+
+Both candidates use an independently pinned verifier, which is kept offline
+and receives the submitted artifact only after the agent finishes:
+
+```sh
+python -m circuit_bench image --adapter vibe-logisim --ref v26.11.2 --role verifier \
   --tag circuit-verifier:baseline --manifest .cache/verifier.json
 ```
 
@@ -48,18 +73,21 @@ Set your own service credentials in your shell. They are passed in memory;
 do not put them in an experiment file or commit an environment file.
 
 ```sh
-export VIBE_BENCH_BASE_URL='https://your-service.example/v1'
-export VIBE_BENCH_MODEL='your-exact-model-id'
-read -rsp 'API key: ' VIBE_BENCH_API_KEY; echo
-export VIBE_BENCH_API_KEY
+export CIRCUIT_BENCH_BASE_URL='https://your-service.example/v1'
+export CIRCUIT_BENCH_MODEL='your-exact-model-id'
+read -rsp 'API key: ' CIRCUIT_BENCH_API_KEY; echo
+export CIRCUIT_BENCH_API_KEY
 ```
 
-Copy `experiments/development.json` to a file under `.cache/`. Set the model's
+Copy `experiments/pi-baseline.json` (Pi) or `experiments/development.json` (Vibe)
+to a file under `.cache/`. Set the model's
 **actual** `context_window`, reasoning effort, API format, tasks and image names.
 The example's 200000 is illustrative, not an automatic limit. The benchmark adds
 no arbitrary output-token cap and does not replace the product's context management.
-For `anthropic-messages`, also set `model.max_output` to the service's supported
-output capacity: that protocol requires it. No value is guessed. Its base URL is
+Pi requires explicit `max_output` and `vision` for every API; it does not use
+upstream's default model capacities. For Vibe with `anthropic-messages`, also set
+`model.max_output` to the service's supported output capacity. No value is guessed.
+The Messages base URL is
 the SDK endpoint root (for example `https://your-service.example`); a trailing
 `/v1` is also accepted. Chat/Responses normally use a base ending in `/v1`.
 
@@ -110,14 +138,23 @@ The visual/report commands can operate on saved artifacts without another model
 call. Functional success alone does not mean a readable diagram. Unreviewed visual
 quality and unreported token usage are shown as unknown, never as zero or success.
 
-## Compare a harness change
+## Compare models or harnesses
 
-Add another `{ "id": "candidate", "image": "circuit-agent:candidate" }` to the
+For a harness comparison, add a Pi candidate
+`{ "id": "pi", "adapter": "pi", "image": "circuit-agent:pi" }`, or another
+`{ "id": "candidate", "adapter": "vibe-logisim", "image": "circuit-agent:candidate" }` to the
 experiment and keep the model and verifier fixed. Describe the coherent change in
 a short note: problem, mechanism, expected benefit and possible regression. The
 scheduler interleaves candidates within each task/repeat. Start with a small
 exploration set, then repeat uncertain or important cases. Report each task and
 all attempts; there is no weighted score that lets cheap wrong circuits win.
+
+For model comparisons, keep the candidate image, agent configuration, tasks,
+verifier and trial budgets fixed. Prepare a separate experiment for each model
+with its exact ID and supported capacities, then pass all experiment directories
+to `report`. The tables separate models; automated matched-pair analysis currently
+covers fixed-model harness comparisons only. A result measures model performance
+under the stated harness, not a harness-free intrinsic ability.
 
 ## Contribute a task
 

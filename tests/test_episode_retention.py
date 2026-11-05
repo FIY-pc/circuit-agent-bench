@@ -18,9 +18,9 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from circuit_bench.retention import NativeTranscript, interrupt_episode, write_json
-from circuit_bench.host import EventStream, Host
-from circuit_bench.runner import run_episode
+from circuit_bench.adapters.vibe_logisim.retention import NativeTranscript, interrupt_episode, write_json
+from circuit_bench.adapters.vibe_logisim.host import EventStream, Host
+from circuit_bench.adapters.vibe_logisim.runner import run_episode
 
 ROOT = Path(__file__).resolve().parents[1]
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jK1sAAAAASUVORK5CYII=')
@@ -108,7 +108,7 @@ def fixture_episode(root, mode):
     fixture.mkdir()
     (fixture / 'design.circ').write_text('initial')
     tree = SimpleNamespace(describe=lambda: {'commit': 'fixture'})
-    with patch('circuit_bench.runner.Host', FixtureHost), patch.object(FixtureHost, 'mode', mode):
+    with patch('circuit_bench.adapters.vibe_logisim.runner.Host', FixtureHost), patch.object(FixtureHost, 'mode', mode):
         return run_episode(TASK, fixture, root / 'episode', tree, service=SERVICE)
 
 
@@ -142,14 +142,14 @@ class EpisodeRetentionTests(unittest.TestCase):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)}
-                with patch.dict(os.environ, {'VIBE_BENCH_PROJECT_DIR': str(root / 'collected/project')}):
+                with patch.dict(os.environ, {'CIRCUIT_BENCH_PROJECT_DIR': str(root / 'collected/project')}):
                     fixture_episode(root, mode)
                 self.check_evidence(root, expected)
                 self.assertEqual(handlers, {sig: signal.getsignal(sig) for sig in handlers})
 
     def start_child(self, root):
-        env = {k: v for k, v in os.environ.items() if not k.startswith('VIBE_BENCH_')}
-        env.update(PYTHONPATH=str(ROOT), VIBE_BENCH_PROJECT_DIR=str(root / 'collected/project'))
+        env = {k: v for k, v in os.environ.items() if not k.startswith('CIRCUIT_BENCH_')}
+        env.update(PYTHONPATH=str(ROOT), CIRCUIT_BENCH_PROJECT_DIR=str(root / 'collected/project'))
         child = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--episode-child', str(root)],
                                  env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.addCleanup(lambda: child.poll() is None and child.kill())
@@ -264,8 +264,8 @@ class EpisodeRetentionTests(unittest.TestCase):
                 copytree(source, target, **kwargs)
                 raise KeyboardInterrupt('cancelled during initialization')
 
-            with patch('circuit_bench.runner.shutil.copytree', side_effect=interrupted_copy), \
-                 patch.dict(os.environ, {'VIBE_BENCH_PROJECT_DIR': ''}):
+            with patch('circuit_bench.adapters.vibe_logisim.runner.shutil.copytree', side_effect=interrupted_copy), \
+                 patch.dict(os.environ, {'CIRCUIT_BENCH_PROJECT_DIR': ''}):
                 run = run_episode(TASK, fixture, root / 'episode',
                                   SimpleNamespace(describe=lambda: {}), service=SERVICE)
             self.assertEqual(run['outcome'], 'interrupted')
@@ -296,7 +296,7 @@ class EpisodeRetentionTests(unittest.TestCase):
             host._streams.append(stream)
             host.proc = SimpleNamespace(pid=123, stdout=None, poll=lambda: None,
                                         send_signal=lambda sig: ended.set(), wait=lambda **kw: None)
-            with patch('circuit_bench.host.os.killpg'):
+            with patch('circuit_bench.adapters.vibe_logisim.host.os.killpg'):
                 start = time.monotonic()
                 host.close()
                 self.assertLess(time.monotonic() - start, 1)
@@ -309,13 +309,13 @@ class EpisodeRetentionTests(unittest.TestCase):
 @unittest.skipUnless(importlib.util.find_spec('harbor') is not None, 'Harbor extra not installed')
 class HarborCancellationTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancelled_exec_is_finalized_before_run_returns(self):
-        from circuit_bench.harbor_agent import VibeLogisim
+        from circuit_bench.adapters.vibe_logisim.harbor_agent import VibeLogisim
         started = asyncio.Event()
         calls = []
 
         async def execute(environment, command, **kwargs):
             calls.append((command, kwargs))
-            if 'circuit_bench.episode ' in command:
+            if 'circuit_bench.adapters.vibe_logisim.episode ' in command:
                 started.set()
                 await asyncio.Event().wait()
             await asyncio.sleep(0)
@@ -326,15 +326,15 @@ class HarborCancellationTests(unittest.IsolatedAsyncioTestCase):
         agent = SimpleNamespace(model_name='fixture', effort='high', context_window=10000,
                                 api='openai-completions', max_output=None, exec_as_agent=execute,
                                 logger=logging.getLogger('fixture'))
-        with patch.dict(os.environ, {'VIBE_BENCH_BASE_URL': 'http://127.0.0.1:1/v1', 'VIBE_BENCH_API_KEY': 'sentinel'}):
+        with patch.dict(os.environ, {'CIRCUIT_BENCH_BASE_URL': 'http://127.0.0.1:1/v1', 'CIRCUIT_BENCH_API_KEY': 'sentinel'}):
             task = asyncio.create_task(VibeLogisim.run(agent, 'fixture', SimpleNamespace(upload_file=upload), None))
             await asyncio.wait_for(started.wait(), timeout=5)
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):
                 await task
         self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0][1]['env']['VIBE_BENCH_PROJECT_DIR'], '/logs/artifacts/project')
-        self.assertIn('circuit_bench.retention --interrupt', calls[1][0])
+        self.assertEqual(calls[0][1]['env']['CIRCUIT_BENCH_PROJECT_DIR'], '/logs/artifacts/project')
+        self.assertIn('circuit_bench.adapters.vibe_logisim.retention --interrupt', calls[1][0])
         self.assertNotIn('env', calls[1][1])
 
 

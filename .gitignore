@@ -8,3 +8,4 @@ reports/
 build/
 dist/
 .env
+node_modules/

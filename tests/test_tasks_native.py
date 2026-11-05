@@ -1,6 +1,6 @@
 """Opt-in real-native regression, one reused host and at most one worker JVM.
 
-Set VIBE_BENCH_NATIVE=1 and VIBE_BENCH_TREE, plus optional VIBE_BENCH_HOST.
+Set CIRCUIT_BENCH_NATIVE=1 and CIRCUIT_BENCH_TREE, plus optional CIRCUIT_BENCH_HOST.
 Run serially under the documented memory/timeout scope. No models are called.
 """
 import json
@@ -16,17 +16,17 @@ from circuit_bench.reference_circuits import GENERATORS, VARIANTS, alu8, sorting
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@unittest.skipUnless(os.environ.get('VIBE_BENCH_NATIVE') == '1', 'set VIBE_BENCH_NATIVE=1 to run native circuits')
+@unittest.skipUnless(os.environ.get('CIRCUIT_BENCH_NATIVE') == '1', 'set CIRCUIT_BENCH_NATIVE=1 to run native circuits')
 class NativeTaskTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.grader = Grader(os.environ['VIBE_BENCH_TREE']).__enter__()
+        cls.grader = Grader(os.environ['CIRCUIT_BENCH_TREE']).__enter__()
         cls.reports = []
 
     @classmethod
     def tearDownClass(cls):
         cls.grader.__exit__(None, None, None)
-        if path := os.environ.get('VIBE_BENCH_NATIVE_REPORT'):
+        if path := os.environ.get('CIRCUIT_BENCH_NATIVE_REPORT'):
             Path(path).write_text(json.dumps(cls.reports, indent=2) + '\n')
 
     def grade(self, task, artifact, variant):

@@ -26,7 +26,7 @@ console.log(JSON.stringify({stopReason:result.stopReason, content:result.content
 '''
 
 
-@unittest.skipUnless(os.environ.get('VIBE_BENCH_NATIVE_TREE'), 'set VIBE_BENCH_NATIVE_TREE for product SDK test')
+@unittest.skipUnless(os.environ.get('CIRCUIT_BENCH_NATIVE_TREE'), 'set CIRCUIT_BENCH_NATIVE_TREE for product SDK test')
 class ProductTransport(unittest.TestCase):
     def test_messages_sdk_route_query_and_capacity(self):
         received=[]
@@ -50,8 +50,8 @@ class ProductTransport(unittest.TestCase):
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
             with MeterProxy(f'http://127.0.0.1:{server.server_port}','fixture',api='anthropic-messages') as proxy:
-                result=subprocess.run([os.environ.get('VIBE_LOGISIM_NODE','node'),'--input-type=module','-e',SCRIPT,
-                    str(Path(os.environ['VIBE_BENCH_NATIVE_TREE']).resolve()),proxy.url],capture_output=True,text=True,timeout=25)
+                result=subprocess.run([os.environ.get('CIRCUIT_BENCH_NODE','node'),'--input-type=module','-e',SCRIPT,
+                    str(Path(os.environ['CIRCUIT_BENCH_NATIVE_TREE']).resolve()),proxy.url],capture_output=True,text=True,timeout=25)
                 self.assertEqual(result.returncode,0,result.stderr[-2000:])
                 self.assertEqual(json.loads(result.stdout)['content'],[{'type':'text','text':'OK'}])
             self.assertEqual(received,[('/v1/messages?beta=true',64000)])
