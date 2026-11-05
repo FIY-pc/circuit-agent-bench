@@ -94,7 +94,7 @@ def execute(task, fixture, instruction, tree, output, *, model, effort, context_
                 'instructionSha256': hashlib.sha256(instruction.encode()).hexdigest(),
                 'adapterSha256': sha(__file__),
                 'adapterFiles': {name: sha(Path(__file__).parent / name)
-                    for name in ('episode.py','runner.py','host.py','meter.py')},
+                    for name in ('episode.py','runner.py','retention.py','host.py','meter.py')},
                 'serviceFingerprint': hashlib.sha256(base.rstrip('/').encode()).hexdigest()}
     if max_output is not None:
         manifest['model']['maxOutput'] = max_output

@@ -11,7 +11,7 @@ import tempfile
 from circuit_bench.episode import sha, source_identity
 from circuit_bench.host import Tree
 
-RUNTIME_MODULES = ('__init__.py', 'host.py', 'runner.py', 'episode.py', 'meter.py', 'preflight.py')
+RUNTIME_MODULES = ('__init__.py', 'host.py', 'runner.py', 'retention.py', 'episode.py', 'meter.py', 'preflight.py')
 
 
 def snapshot(tree, destination):

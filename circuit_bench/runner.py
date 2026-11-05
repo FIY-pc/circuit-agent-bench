@@ -4,13 +4,17 @@ This adapter supplies neither tools nor an agent loop. The product owns its
 prompt, tools, retries and compaction. Model credentials never enter profiles.
 """
 from __future__ import annotations
+from contextlib import contextmanager
 import json
 import os
 import shutil
+import signal
 import tempfile
+import threading
 import time
 from pathlib import Path
 from circuit_bench.host import Host, Tree
+from circuit_bench.retention import NativeTranscript, process_identity, retain_outputs, write_json
 
 FILE_TOOLS = {'read_file', 'write_file', 'list_files', 'exec_command'}
 
@@ -50,30 +54,73 @@ def _ledger(events, usage):
     return ledger, rows
 
 
+class EpisodeInterrupted(BaseException):
+    pass
+
+
+@contextmanager
+def interruption_signals():
+    """Turn CLI termination into cleanup; restore embedding callers' handlers."""
+    handlers = {}
+    if threading.current_thread() is threading.main_thread():
+        def interrupted(signum, _frame):
+            # A second TERM/INT must not abort artifact finalization.
+            for sig in handlers:
+                signal.signal(sig, signal.SIG_IGN)
+            raise EpisodeInterrupted(signal.Signals(signum).name)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            handlers[sig] = signal.signal(sig, interrupted)
+    try:
+        yield
+    finally:
+        for sig, handler in handlers.items():
+            signal.signal(sig, handler)
+
+
 def run_episode(task, fixture: Path, run_dir: Path, tree: Tree, *, service):
+    with interruption_signals():
+        return _run_episode(task, fixture, run_dir, tree, service=service)
+
+
+def _run_episode(task, fixture: Path, run_dir: Path, tree: Tree, *, service):
+    run_dir = run_dir.resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
     if (run_dir / 'run.json').exists():
         raise ValueError('Trial output already contains a run')
-    work = Path(tempfile.mkdtemp(prefix='circuit-trial-'))
-    folder, state = work / 'project', work / 'state'
-    shutil.copytree(fixture, folder)
-    profile = state / 'profile'
-    profile.mkdir(parents=True)
     if service['apiKey'] != 'local-proxy':
         raise ValueError('Product profile must use the in-memory proxy')
-    profile_file = profile / 'builtin-provider.json'
-    profile_file.write_text(json.dumps({'version': 2, 'defaultId': service['id'], 'services': [service]}))
-    profile_file.chmod(0o600)
-    setup = {'task': task['id'], 'model': service['model'], 'effort': service['effort'],
-             'api': service['api'], 'vibeLogisim': tree.describe(),
-             'started': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
-    (run_dir / 'setup.json').write_text(json.dumps(setup, ensure_ascii=False, indent=2))
+    # Harbor uses its collected artifact directory as the live workspace. Local
+    # episodes use result/ directly. Neither depends on an end-of-turn copy.
+    folder = Path(os.environ.get('VIBE_BENCH_PROJECT_DIR') or run_dir / 'result').resolve()
+    state = Path(tempfile.mkdtemp(prefix='circuit-state-'))
     timeout = 60 * task['timeout_minutes']
     outcome, error, final, usage = 'error', None, None, None
     t0 = time.time()
-    host, stream = Host(tree, state=state, log=run_dir / 'host.log'), None
+    host, stream, transcript = None, None, None
+    process = {'pid': os.getpid(), 'start': process_identity(os.getpid()), 'started': t0,
+               'state': str(state), 'project': str(folder)}
+    write_json(run_dir / 'process.json', process)
+    write_json(run_dir / 'run.json', {'outcome': 'running', 'finalized': False,
+                                    'elapsedMs': 0, 'ledger': None, 'error': None, 'final': None})
+    cleanup_errors = []
     try:
+        shutil.copytree(fixture, folder, symlinks=True)
+        profile = state / 'profile'
+        profile.mkdir(parents=True)
+        profile_file = profile / 'builtin-provider.json'
+        profile_file.write_text(json.dumps({'version': 2, 'defaultId': service['id'], 'services': [service]}))
+        profile_file.chmod(0o600)
+        setup = {'task': task['id'], 'model': service['model'], 'effort': service['effort'],
+                 'api': service['api'], 'vibeLogisim': tree.describe(),
+                 'started': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+        write_json(run_dir / 'setup.json', setup)
+        transcript = NativeTranscript(state, run_dir)
+        transcript.start()
+        host = Host(tree, state=state, log=run_dir / 'host.log')
         host.start()
+        if getattr(host, 'proc', None):
+            process['host'] = {'pid': host.proc.pid, 'start': process_identity(host.proc.pid)}
+            write_json(run_dir / 'process.json', process)
         stream = host.events(run_dir / 'events.jsonl')
         if not stream.wait(lambda e: e.get('topic') == 'resync', 30):
             raise RuntimeError('宿主事件流没有就绪')
@@ -110,23 +157,42 @@ def run_episode(task, fixture: Path, run_dir: Path, tree: Tree, *, service):
                 final = x['text']
             if x.get('type') == 'runtime-error':
                 error = error or x.get('message')
-    except Exception as e:  # noqa: BLE001 - the episode failed; record why
+    except (EpisodeInterrupted, KeyboardInterrupt) as e:
+        outcome, error = 'interrupted', f'{type(e).__name__}: {e}'
+        try:
+            if host:
+                host.agent('stop', timeout=5)
+        except (Exception, SystemExit):
+            pass
+    except (Exception, SystemExit) as e:  # the episode failed; record why
         error = f'{type(e).__name__}: {e}'[:600]
     finally:
+        if threading.current_thread() is threading.main_thread():
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                signal.signal(sig, signal.SIG_IGN)
         elapsed = int((time.time() - t0) * 1000)
-        host.close()
-    stamped = [{'t': t, 'event': ev} for t, ev in zip(stream.times, stream.events)] if stream else []
-    ledger, rows = _ledger(stamped, usage)
-    with (run_dir / 'tool-calls.jsonl').open('w', encoding='utf-8') as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False) + '\n')
-    with (run_dir / 'commands.jsonl').open('w', encoding='utf-8') as f:
-        for r in rows:
-            if r['tool'] == 'exec_command':
-                f.write(json.dumps({'command': r.get('target'), 'exitCode': r.get('exitCode'), 'status': r.get('status')}, ensure_ascii=False) + '\n')
-    shutil.copytree(folder, run_dir / 'result', symlinks=True)
-    shutil.rmtree(work, ignore_errors=True)
-    run = {'outcome': outcome, 'elapsedMs': elapsed, 'error': error, 'final': final, 'ledger': ledger}
-    (run_dir / 'run.json').write_text(json.dumps(run, ensure_ascii=False, indent=1), encoding='utf-8')
-    (run_dir / 'setup.json').write_text(json.dumps(setup, ensure_ascii=False, indent=1), encoding='utf-8')
+        try:
+            if host:
+                host.close()
+        except (Exception, SystemExit) as e:
+            cleanup_errors.append(f'Host shutdown: {type(e).__name__}: {e}')
+        retained = retain_outputs(state, folder, run_dir, transcript)
+        retained['retentionErrors'].extend(cleanup_errors)
+        stamped = [{'t': t, 'event': ev} for t, ev in zip(stream.times, stream.events)] if stream else []
+        ledger, rows = _ledger(stamped, usage)
+        try:
+            with (run_dir / 'tool-calls.jsonl').open('w', encoding='utf-8') as f:
+                for r in rows:
+                    f.write(json.dumps(r, ensure_ascii=False) + '\n')
+            with (run_dir / 'commands.jsonl').open('w', encoding='utf-8') as f:
+                for r in rows:
+                    if r['tool'] == 'exec_command':
+                        f.write(json.dumps({'command': r.get('target'), 'exitCode': r.get('exitCode'), 'status': r.get('status')}, ensure_ascii=False) + '\n')
+        except Exception as e:
+            retained['retentionErrors'].append(f'Tool ledger: {type(e).__name__}: {e}')
+        if retained['retentionErrors'] and outcome == 'completed':
+            outcome, error = 'error', 'Episode evidence could not be fully retained'
+        run = {'outcome': outcome, 'elapsedMs': elapsed, 'error': error, 'final': final,
+               'ledger': ledger, 'finalized': True, **retained}
+        write_json(run_dir / 'run.json', run)
     return run

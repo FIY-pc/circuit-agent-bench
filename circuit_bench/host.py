@@ -279,9 +279,6 @@ class Host:
         return stream
 
     def close(self):
-        for s in self._streams:
-            s.close()
-        self._streams = []
         p, self.proc = self.proc, None
         if p and p.poll() is None:
             try:
@@ -298,6 +295,11 @@ class Host:
                 os.killpg(p.pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
+        # Closing urllib's response while its reader waits for SSE can block on
+        # the read lock. Stop the producer first so cleanup cannot wait forever.
+        for s in self._streams:
+            s.close()
+        self._streams = []
         if p and p.stdout:
             p.stdout.close()
         if self._log:

@@ -5,9 +5,11 @@ the task instruction enters the product. Harbor owns scheduling/isolation;
 the product owns its tools, retries, context management and stopping policy.
 """
 from pathlib import Path
+import asyncio
 import json
 import os
 import shlex
+import sys
 import tempfile
 
 from harbor.agents.installed.base import BaseInstalledAgent
@@ -46,11 +48,23 @@ class VibeLogisim(BaseInstalledAgent):
         # Environment is passed through Harbor's scoped execution, not written
         # into a task, Dockerfile, job YAML or a product authentication profile.
         env = {k: os.environ[k] for k in ('VIBE_BENCH_BASE_URL', 'VIBE_BENCH_API_KEY')}
-        await self.exec_as_agent(environment,
-            ' '.join(map(shlex.quote, command)) + '; status=$?; '
-            'mkdir -p /logs/artifacts; '
-            'if [ -d /logs/agent/episode/result ]; then cp -a /logs/agent/episode/result /logs/artifacts/project; fi; '
-            'exit "$status"', env=env, cwd='/opt/bench')
+        env['VIBE_BENCH_PROJECT_DIR'] = '/logs/artifacts/project'
+        try:
+            await self.exec_as_agent(environment, ' '.join(map(shlex.quote, command)),
+                                     env=env, cwd='/opt/bench')
+        finally:
+            # Cancelling docker exec does not signal its container process.
+            # Finalize while the environment is still available, before Harbor
+            # collects artifacts and stops it. No model credentials are needed.
+            failure = sys.exc_info()[1]
+            try:
+                await asyncio.shield(self.exec_as_agent(environment,
+                    'python3 -m circuit_bench.retention --interrupt /logs/agent/episode',
+                    cwd='/opt/bench', timeout_sec=45))
+            except Exception:
+                if failure is None:
+                    raise
+                self.logger.exception('Episode finalization failed; collected project remains available')
 
     def populate_context_post_run(self, context: AgentContext):
         path = self.logs_dir / 'episode/run.json'
