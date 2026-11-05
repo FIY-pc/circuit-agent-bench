@@ -236,12 +236,15 @@ def sorting_network(variant=None):
     return c
 
 
-def cpu8(variant=None):
+def cpu8(variant=None, *, interrupts=False):
     c = Circuit()
     clk, rst, inst, ma = c.pin('CLK', 1), c.pin('RST', 1), c.pin('INST', 16), c.pin('MA', 4)
     immediate, source, dest, opcode = c.split(inst, [8, 2, 2, 4])
     address = c.split(immediate, [4, 4])[0]
     pc, halted = c.net(8, 'pc_state'), c.net(1, 'halt_state')
+    if interrupts:
+        from circuit_bench.interrupt_reference import controller
+        control = controller(c, clk, rst, inst, pc, halted, variant)
     registers = [c.net(8, f'reg{i}') for i in range(4)]
     memory = [c.net(8, f'mem{i}') for i in range(16)]
     a, b = c.select(registers, dest), c.select(registers, source)
@@ -256,6 +259,8 @@ def cpu8(variant=None):
     result = c.select(values, opcode)
     decode = [c.eq(opcode, i) for i in range(16)]
     running = c.const(1) if variant == 'ignores-halt' else c.gate('NOT', halted)
+    if interrupts and variant != 'entry-executes-instruction':
+        running = c.gate('AND', running, c.gate('NOT', control['accept']))
     write = c.gate('AND', running, c.combine('OR', decode[1:11]))
     for i, out in enumerate(registers):
         enable = c.gate('AND', write, c.eq(dest, i))
@@ -271,16 +276,32 @@ def cpu8(variant=None):
     increment = c.arithmetic('Adder', pc, c.const(1, 8))[0]
     nextpc = c.mux(increment, immediate, take)
     pc_enable = c.gate('AND', running, c.gate('NOT', decode[15]))
+    if interrupts:
+        nextpc = c.mux(nextpc, control['target'], control['redirect'])
+        pc_enable = c.gate('OR', pc_enable, control['redirect'])
+        halt_next = c.gate('OR', halted, c.gate('AND', running, decode[15]))
+        if variant != 'halt-never-wakes':
+            halt_next = c.mux(halt_next, c.const(0), control['accept'])
     c.register(nextpc, clk, rst, pc_enable, pc, variant)
-    c.register(c.gate('OR', halted, decode[15]), clk, rst, out=halted, variant=variant)
+    if not interrupts:
+        halt_next = c.gate('OR', halted, decode[15])
+    c.register(halt_next, clk, rst, out=halted, variant=variant)
     for name, value, width in [('PC', pc, 8), ('HALTED', halted, 1), *[(f'R{i}', value, 8) for i, value in enumerate(registers)],
                                ('MD', c.select(memory, ma), 8)]:
         c.pin(name, width, True, value)
     return c
 
 
-GENERATORS = {'alu8': alu8, 'register-file': register_file, 'sorting-network': sorting_network, 'cpu8': cpu8}
+def cpu8_interrupts(variant=None):
+    return cpu8(variant, interrupts=True)
+
+
+GENERATORS = {'cpu8-interrupts': cpu8_interrupts, 'alu8': alu8, 'register-file': register_file, 'sorting-network': sorting_network, 'cpu8': cpu8}
 VARIANTS = {
+    'cpu8-interrupts': ('low-priority-first', 'ignores-mask', 'drops-masked-requests',
+        'no-nesting', 'epc-plus-one', 'single-saved-pc', 'mask-not-restored',
+        'ie-not-restored', 'entry-executes-instruction', 'halt-never-wakes',
+        'subtract-adds', 'drops-stores'),
     'alu8': ('subtract-adds', 'arithmetic-right', 'no-borrow'),
     'register-file': ('ignores-write-enable', 'zero-register', 'aliased-read-port', 'async-reset', 'falling-edge'),
     'sorting-network': ('missing-last-stage', 'signed-order', 'duplicate-output'),
@@ -291,8 +312,6 @@ VARIANTS = {
 def generate(output):
     for task, generator in GENERATORS.items():
         generator().write(Path(output) / task / 'tests/reference.circ')
-        for variant in VARIANTS[task]:
-            generator(variant).write(Path(output) / task / 'tests/wrong' / (variant + '.circ'))
 
 
 if __name__ == '__main__':

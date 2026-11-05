@@ -312,6 +312,9 @@ def cpu_cases(seed):
 
 
 def cases(oracle):
+    if oracle['kind'] == 'cpu8_interrupts':
+        from circuit_bench.interrupt_oracle import cases as interrupt_cases
+        return interrupt_cases(oracle['seed'])
     factories = {"alu8": alu_cases, "register_file": register_cases,
                  "sorting_network": sorting_cases, "cpu8": cpu_cases}
     return factories[oracle["kind"]](oracle["seed"])

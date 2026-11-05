@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 from circuit_bench.grading import Grader
 from circuit_bench.reference_circuits import GENERATORS, VARIANTS, alu8, sorting_network
@@ -40,10 +41,34 @@ class NativeTaskTests(unittest.TestCase):
                 result = self.grade(task, ROOT/'tasks'/task/'tests/reference.circ', 'reference')
                 self.assertIs(result['passed'], True, result.get('function'))
             for variant in VARIANTS.get(task, ()):
-                with self.subTest(task=task, variant=variant):
-                    result = self.grade(task, ROOT/'tasks'/task/'tests/wrong'/(variant+'.circ'), variant)
+                with self.subTest(task=task, variant=variant), tempfile.TemporaryDirectory() as temp:
+                    artifact = Path(temp)/'design.circ'
+                    GENERATORS[task](variant).write(artifact)
+                    result = self.grade(task, artifact, variant)
                     self.assertEqual(result['status'], 'failed')
                     self.assertIs(result['passed'], False)
+
+    def test_known_native_loader_refusals_are_invalid_artifacts(self):
+        for defect, reason in [('unknown-component', 'native_component_loss'),
+                               ('missing-library', 'missing_dependency'),
+                               ('diagonal-wire', 'invalid_wire_geometry'),
+                               ('conflicting-contents', 'invalid_memory_contents')]:
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as temp:
+                c = alu8()
+                if defect == 'unknown-component':
+                    c.component(1, 'Nonexistent Gate', 50, 50)
+                elif defect == 'missing-library':
+                    ET.SubElement(c.root, 'lib', name='99', desc='file#missing-dependency.circ')
+                elif defect == 'diagonal-wire':
+                    ET.SubElement(c.main, 'wire', {'from': '(10,10)', 'to': '(20,20)'})
+                else:
+                    memory = c.component(4, 'ROM', 50, 50)
+                    ET.SubElement(memory, 'a', name='contents', val='').text = 'addr/data: 8 8\n0'
+                artifact = Path(temp)/'design.circ'
+                c.write(artifact)
+                result = self.grade('alu8', artifact, defect)
+                self.assertEqual((result['status'], result['passed'], result.get('reason')),
+                                 ('invalid_artifact', False, reason))
 
     def test_different_sorting_topology_is_accepted(self):
         with tempfile.TemporaryDirectory() as temp:

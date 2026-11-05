@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "kind": "cpu8_interrupts",
+  "interface": [
+    {
+      "name": "CLK",
+      "width": 1,
+      "direction": "input"
+    },
+    {
+      "name": "RST",
+      "width": 1,
+      "direction": "input"
+    },
+    {
+      "name": "INST",
+      "width": 16,
+      "direction": "input"
+    },
+    {
+      "name": "MA",
+      "width": 4,
+      "direction": "input"
+    },
+    {
+      "name": "IRQ",
+      "width": 3,
+      "direction": "input"
+    },
+    {
+      "name": "PC",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "R0",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "R1",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "R2",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "R3",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "HALTED",
+      "width": 1,
+      "direction": "output"
+    },
+    {
+      "name": "MD",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "IE",
+      "width": 1,
+      "direction": "output"
+    },
+    {
+      "name": "MASK",
+      "width": 3,
+      "direction": "output"
+    },
+    {
+      "name": "PENDING",
+      "width": 3,
+      "direction": "output"
+    },
+    {
+      "name": "LEVEL",
+      "width": 2,
+      "direction": "output"
+    },
+    {
+      "name": "DEPTH",
+      "width": 2,
+      "direction": "output"
+    },
+    {
+      "name": "EPC",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "ACK",
+      "width": 3,
+      "direction": "output"
+    }
+  ],
+  "seed": 938105
+}

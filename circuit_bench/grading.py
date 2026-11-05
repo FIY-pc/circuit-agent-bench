@@ -15,6 +15,7 @@ from contextlib import redirect_stdout
 import hashlib
 import itertools
 import json
+import re
 from pathlib import Path
 import shutil
 import sys
@@ -22,7 +23,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from circuit_bench.host import Host, HostError, Tree
-from circuit_bench import task_oracles
+from circuit_bench import task_oracles, interrupt_oracle
 
 
 def digest(path):
@@ -37,8 +38,39 @@ def initial_report(task_id=None):
     }
 
 
+def candidate_load_failure(stage, error):
+    """Known document refusals only; runtime/compiler/transport failures stay errors.
+
+    Some native refusals currently have broad host codes. Match the loader's
+    concrete diagnostic, not words like 'load', 'dependency', or 'exception'.
+    This deliberately does not classify arbitrary Java null-pointer failures.
+    """
+    if stage not in ('open', 'interface') or not isinstance(error, HostError) or not isinstance(error.error, dict):
+        return None
+    code, message = error.error.get('code'), error.error.get('message', '')
+    if code == 'INVALID_DOCUMENT':
+        return 'native_invalid_document'
+    if code == 'DEPENDENCY_CHANGED':
+        if message.startswith('缺少组件库：') and message.endswith('。需与电路文件放在同一目录。'):
+            return 'missing_dependency'
+        if message.startswith('Logisim 无法载入这个文件：') and '加载后覆盖不完整：comp ' in message:
+            return 'native_component_loss'
+    if code == 'UNKNOWN':
+        if re.match(r'^电路 "[^"]*" 的 wire #[0-9]+（from=', message) and '：导线必须水平或垂直；' in message:
+            return 'invalid_wire_geometry'
+    if code == 'INVALID_INPUT':
+        if (re.match(r'^电路 "[^"]*" 的 (ROM|RAM) @ ', message)
+                and message.endswith(' 的 contents 同时包含 val 属性和文本；原生格式应删除 val 属性并保留文本内容。')):
+            return 'invalid_memory_contents'
+    return None
+
+
 def record_error(report, stage, error):
-    report.update(status='error', passed=None)
+    reason = candidate_load_failure(stage, error)
+    if reason:
+        report.update(status='invalid_artifact', passed=False, reason=reason)
+    else:
+        report.update(status='error', passed=None)
     report['error'] = {'stage': stage, 'type': type(error).__name__, 'message': str(error)}
     if isinstance(error, HostError):
         report['error']['host_error'] = error.error
@@ -209,12 +241,13 @@ class Grader:
             oracle_path = task / 'tests/oracle.json'
             oracle = json.loads(oracle_path.read_text())
             report['task_id'] = metadata['id']
-            if oracle['schema_version'] != 1 or oracle['kind'] not in ('full_adder', 'counter4', *task_oracles.INTERFACES):
+            if oracle['schema_version'] != 1 or oracle['kind'] not in ('full_adder', 'counter4', 'cpu8_interrupts', *task_oracles.INTERFACES):
                 raise ValueError('unsupported oracle')
             report['provenance'] = {
                 'product': self.identity, 'task_sha256': digest(task / 'task.json'),
                 'oracle_sha256': digest(oracle_path), 'grader_sha256': digest(__file__),
                 'task_oracles_sha256': digest(task_oracles.__file__),
+                'interrupt_oracle_sha256': digest(interrupt_oracle.__file__),
             }
             stage = 'artifact'
             if not artifact.is_file():
