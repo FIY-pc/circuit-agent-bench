@@ -22,6 +22,10 @@ Snapshots follow the product's own persisted conversation saves every 250 ms,
 with a final export before private state removal. `trajectory/status.json`
 records the last retained snapshot or an explicit export failure. A hard kill
 can only preserve the last product save, not messages still held in memory.
+The product keeps the raw transcript when compacting context: checkpoints
+project a shorter provider request, while native saves retain the original
+messages. The latest snapshot therefore includes observations preceding
+compaction; no duplicate snapshot archive is needed for compaction.
 Export reads only `conversations.json`, strips account/service selection fields,
 and never follows arbitrary file references or copies profile/auth/session
 directories. Native transcript export failure leaves the private temporary state

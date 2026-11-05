@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import http.server
+import importlib.util
 import json
 import logging
 import os
@@ -211,6 +212,35 @@ class EpisodeRetentionTests(unittest.TestCase):
             self.assertEqual(status['status'], 'retained')
             self.assertTrue(status['sourceMissing'])
 
+    def test_repeated_compaction_saves_keep_full_native_observations(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / 'state'
+            state.mkdir()
+            native = native_record()
+            record = native['workspaces']['workspace']['conversations']['conversation']
+            original = json.loads(json.dumps(record['transcript']))
+            record['compactions'] = []
+            exporter = NativeTranscript(state, root / 'out')
+            write_json(state / 'conversations.json', native)
+            exporter.snapshot()
+            for timestamp in (1, 2):
+                # Product compaction stores a projection checkpoint alongside
+                # the intact raw transcript, then subsequent messages append.
+                record['compactions'].append({'through': len(record['transcript']),
+                    'summary': 'Earlier context summarized', 'timestamp': timestamp})
+                record['transcript'].append({'role': 'user', 'content': 'Continue',
+                                             'timestamp': timestamp})
+                write_json(state / 'conversations.json', native)
+                exporter.snapshot()
+            self.assertEqual(exporter.close()['status'], 'retained')
+            exported = json.loads((root / 'out/trajectory/conversations.json').read_text())
+            retained = exported['workspaces']['workspace']['conversations']['conversation']
+            self.assertEqual(retained['transcript'][:len(original)], original)
+            self.assertEqual(retained['compactions'], record['compactions'])
+            media = json.loads((root / 'out/trajectory/media.json').read_text())
+            self.assertEqual((root / 'out/trajectory' / media[0]['path']).read_bytes(), PNG)
+
     def test_native_symlink_never_exports_credentials(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -276,6 +306,7 @@ class EpisodeRetentionTests(unittest.TestCase):
             server.server_close()
 
 
+@unittest.skipUnless(importlib.util.find_spec('harbor') is not None, 'Harbor extra not installed')
 class HarborCancellationTests(unittest.IsolatedAsyncioTestCase):
     async def test_cancelled_exec_is_finalized_before_run_returns(self):
         from circuit_bench.harbor_agent import VibeLogisim
