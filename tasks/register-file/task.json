@@ -1,5 +1,6 @@
 {
   "id": "register-file",
+  "family": "state",
   "artifact": "design.circ",
   "circuit": "main",
   "timeout_minutes": 35

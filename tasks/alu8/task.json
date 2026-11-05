@@ -1,5 +1,6 @@
 {
   "id": "alu8",
+  "family": "arithmetic",
   "artifact": "design.circ",
   "circuit": "main",
   "timeout_minutes": 25

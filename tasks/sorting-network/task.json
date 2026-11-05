@@ -1,5 +1,6 @@
 {
   "id": "sorting-network",
+  "family": "dataflow",
   "artifact": "design.circ",
   "circuit": "main",
   "timeout_minutes": 45

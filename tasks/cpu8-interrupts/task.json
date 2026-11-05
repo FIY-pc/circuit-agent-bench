@@ -1,5 +1,6 @@
 {
   "id": "cpu8-interrupts",
+  "family": "system",
   "artifact": "design.circ",
   "circuit": "main",
   "timeout_minutes": 180

@@ -20,6 +20,8 @@ The seven tasks start from an empty `main` circuit. Agents receive the entire `i
 | `cpu8` | Single-cycle Compact-8 processor | All 16 instructions; dependent execution; source/destination aliases; memory; loops; taken/untaken branches; jumps and PC wrap; halt; reset and restart | 90 min |
 | `cpu8-interrupts` | Compact-8I processor with prioritized nested interrupts | Complete base ISA plus three sources; pending/masks; three saved frames; precise PC and suppressed entry-edge side effects; nested return; halt wake-up; reset during nesting | 180 min |
 
+`task.json` includes a stable reporting `family`: `arithmetic` for full-adder and ALU8, `state` for counter4 and register-file, `dataflow` for sorting-network, and `system` for both CPU tasks. Families group results; they do not change grading or imply equal task difficulty.
+
 These limits are initial task budgets, not measured model completion estimates. Functional correctness, visual quality, episode completion, and cost are separate results. The functional grader leaves `layout.status=not_evaluated`; passing it makes no visual-quality claim.
 
 ## Interfaces and semantics
