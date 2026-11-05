@@ -521,30 +521,31 @@ def render_html(report):
         return '<div class="scroll"><table><thead><tr>'+''.join('<th>'+esc(h)+'</th>' for h in headers)+'</tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+esc(v)+'</td>' for v in row)+'</tr>' for row in rows)+'</tbody></table></div>'
     parts = ['<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Circuit benchmark report</title><style>body{font:15px/1.5 system-ui,sans-serif;max-width:1400px;margin:32px auto;padding:0 24px;color:#1b2b3d;background:#fafbfd}h1{font-size:28px}h2{font-size:20px;margin-top:32px}.scroll{overflow:auto}table{border-collapse:collapse;background:white;width:100%}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #d5dce4;vertical-align:top}th{background:#eaf0f6}code{overflow-wrap:anywhere}.muted{color:#536476}li{margin-bottom:8px}details{margin:20px 0}summary{cursor:pointer;font-weight:600}td{font-variant-numeric:tabular-nums}th{white-space:nowrap}</style>',
              '<h1>Circuit construction benchmark</h1>', f'<p>{report["attemptCount"]} attempts · Functional results, human visual judgments, and resource use are reported separately.</p>',
-             '<p>Execution kinds: '+esc(json.dumps(report['executions']))+'. Synthetic and scripted rows test infrastructure, not model capability.</p>',
+             '<p class="muted">Only real-model trials enter capability comparisons. Full identities, execution states and measurement gaps are in the details below.</p>',
              f'<p>{report["assessmentExcludedAttempts"]} attempts excluded from capability comparison by explicit assessment; their raw outcomes and all usage remain below.</p>',
-             '<p class="muted">No best-of-k selection. Unknown is not zero. Models and harnesses use stable hashed aliases.</p>']
+             ]
     aliases = {value: f'Model {i+1}' for i, value in enumerate(sorted({r['model'] for r in report['attempts']}))}
+    harness_aliases = {value: f'H{i+1}' for i, value in enumerate(sorted({r['harness'] for r in report['attempts']}))}
     for title, field, key in [('Capability comparison by task', 'capabilityByTask', 'task'), ('Capability comparison by family', 'capabilityByFamily', 'family')]:
         if field == 'capabilityByFamily':
             parts.append('<details><summary>Results by task family</summary>')
         else:
             parts.append('<h2>'+title+'</h2>')
-        parts.append(table([key.title(), 'Candidate', 'Model', 'Passed / all', 'Failed / invalid', 'Evaluator error / unknown'],
-                           [[r[key], r['candidate'], aliases[r['model']], f'{r["functional"]["passed"]}/{r["attempts"]}',
+        parts.append(table([key.title(), 'Candidate', 'Harness', 'Model', 'Passed / all', 'Failed / invalid', 'Evaluator error / unknown'],
+                           [[r[key], r['candidate'], harness_aliases[r['harness']], aliases[r['model']], f'{r["functional"]["passed"]}/{r["attempts"]}',
                              f'{r["functional"]["failed"]}/{r["functional"]["invalid_artifact"]}',
                              f'{r["functional"]["evaluator_error"]}/{r["functional"]["unknown"]}'] for r in report[field]]))
         if field == 'capabilityByFamily':
             parts.append('</details>')
     parts.append('<h2>Every attempt</h2>')
     parts.append(table(['Attempt', 'Task / candidate', 'Functional result', 'Input / output tokens', 'Tools / failed', 'Seconds'],
-                       [[r['attempt'], r['task']+' / '+r['candidate'], r['functional'],
+                       [[r['attempt'], r['task']+' / '+r['candidate']+' / '+harness_aliases[r['harness']], r['functional'],
                          f'{r["metrics"]["input"]} / {r["metrics"]["output"]}',
                          f'{r["metrics"]["toolCalls"]} / {r["metrics"]["failedCalls"]}',
                          round(r['metrics']['elapsedMs']/1000, 1) if r['metrics']['elapsedMs'] is not None else 'unknown'] for r in report['attempts']]).replace('None','unknown'))
     parts.append('<details><summary>Execution, identity and measurement details</summary>')
     parts.append(table(['Attempt', 'Model', 'Harness', 'Execution / outcome / infrastructure', 'Job / repeat', 'Requests with usage / total', 'HTTP errors', 'Assessment exclusion'],
-                       [[r['attempt'], aliases[r['model']]+' = '+r['model'], r['harness'],
+                       [[r['attempt'], aliases[r['model']]+' = '+r['model'], harness_aliases[r['harness']]+' = '+r['harness'],
                          r['execution']+' / '+r['outcome']+' / '+r['infrastructure'], r['job']+' / '+str(r['repeat']),
                          f'{r["metrics"]["requestsWithUsage"]} / {r["metrics"]["requests"]}',
                          r['metrics']['httpErrors'], r['excludedFromCapabilityComparison']] for r in report['attempts']]).replace('None','unknown'))
