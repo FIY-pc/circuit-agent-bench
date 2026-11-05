@@ -1,0 +1,10 @@
+{
+  "question": "How does the candidate harness change circuit delivery under the same model configuration?",
+  "phase": "development",
+  "track": "unassisted",
+  "model": {"effort": "high", "context_window": 200000, "api": "openai-completions"},
+  "verifier_image": "circuit-verifier:baseline",
+  "candidates": [{"id": "baseline", "image": "circuit-agent:baseline"}],
+  "tasks": ["full-adder", "counter4"],
+  "repeats": 1
+}

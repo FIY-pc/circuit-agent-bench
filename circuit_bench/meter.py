@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import http.server
 import json
+import os
+from pathlib import Path
 import threading
 import time
 import urllib.error
@@ -94,7 +96,8 @@ additional tokens to add to the total. Partial coverage has no total estimate.
 
 
 class MeterProxy:
-    def __init__(self, base, key):
+    def __init__(self, base, key, journal=None):
+        self.journal = Path(journal) if journal else None
         self.rows = []
         self._lock = threading.Lock()
         self._sequence = 0
@@ -131,6 +134,9 @@ class MeterProxy:
                        'bodySha256': hashlib.sha256(body).hexdigest(), 'requestBytes': len(body),
                        'path': self.path, 'tools': [t.get('name') or (t.get('function') or {}).get('name') for t in obj.get('tools', [])],
                        'usage': None, 'status': None}
+                with outer._lock:
+                    outer.rows.append(row)
+                    outer._record('started', row)
                 started = time.monotonic()
                 meter = ResponseMeter()
                 try:
@@ -161,12 +167,19 @@ class MeterProxy:
                     row.update(usage=meter.usage, modelReported=meter.model,
                                elapsedMs=round((time.monotonic() - started) * 1000))
                     with outer._lock:
-                        outer.rows.append(row)
+                        outer._record('finished', row)
 
         self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         self.server.daemon_threads = True
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.url = f'http://127.0.0.1:{self.server.server_port}/v1'
+
+    def _record(self, event, row):
+        if self.journal:
+            with self.journal.open('a', encoding='utf-8') as f:
+                f.write(json.dumps({'event': event, **row}, ensure_ascii=False) + '\n')
+                f.flush()
+                os.fsync(f.fileno())
 
     def __enter__(self):
         self.thread.start()

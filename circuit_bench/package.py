@@ -9,11 +9,20 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import shlex
+import re
+import subprocess
 
 
 def package(source, output, agent_image, verifier_image):
     source, output = Path(source), Path(output)
     meta = json.loads((source / 'task.json').read_text())
+    for name in (meta['id'], agent_image, verifier_image):
+        if not re.fullmatch(r'[A-Za-z0-9_./:@-]+', name):
+            raise ValueError('Invalid task or image name')
+    artifact = meta['artifact']
+    if Path(artifact).name != artifact or artifact in ('.','..'):
+        raise ValueError('Task artifact must be a basename')
     if output.exists():
         raise ValueError(f'Output already exists: {output}')
     output.mkdir(parents=True)
@@ -28,19 +37,22 @@ def package(source, output, agent_image, verifier_image):
     # receives this directory; the agent image contains input + visible metadata.
     (env / 'Dockerfile').write_text(f'FROM {agent_image}\nCOPY input /workspace/input\nCOPY task.json /workspace/task.json\nWORKDIR /workspace\n')
     (tests / 'Dockerfile').write_text(f'FROM {verifier_image}\nCOPY oracle.json /evaluation/task/tests/oracle.json\nCOPY task.json /evaluation/task/task.json\nCOPY test.sh /tests/test.sh\nWORKDIR /opt/bench\n')
+    # Static offline verifier uses Docker's own network namespace; it needs
+    # no proxy sidecar or phase-time firewall changes.
+    (tests / 'docker-compose.yaml').write_text('services:\n  main:\n    build: .\n    network_mode: none\n    command: ["sh", "-c", "sleep infinity"]\n')
     (output / 'task.toml').write_text(
         'schema_version = "1.4"\nartifacts = ["/logs/artifacts/project"]\n'
         f'[task]\nname = "circuits/{meta["id"]}"\n'
         f'[agent]\ntimeout_sec = {meta["timeout_minutes"] * 60 + 180}\n'
         '[environment]\ncpus = 2\nmemory_mb = 6144\n'
-        '[verifier]\nenvironment_mode = "separate"\ntimeout_sec = 300\nnetwork_mode = "no-network"\n'
+        '[verifier]\nenvironment_mode = "separate"\ntimeout_sec = 300\n'
         '[verifier.environment]\ncpus = 2\nmemory_mb = 6144\n')
     artifact = meta['artifact']
     if Path(artifact).name != artifact:
         raise ValueError('Initial tasks require a single artifact basename')
     script = f'''#!/bin/bash
 set -uo pipefail
-python3 -m circuit_bench.grading --task /evaluation/task --artifact /logs/artifacts/project/{artifact} --tree /opt/product --out /logs/verifier/grade.json
+python3 -m circuit_bench.grading --task /evaluation/task --artifact {shlex.quote("/logs/artifacts/project/"+artifact)} --tree /opt/product --out /logs/verifier/grade.json
 status=$?
 if [ "$status" -ge 2 ]; then exit "$status"; fi
 python3 - <<'PY'
@@ -55,7 +67,7 @@ PY
     (tests / 'test.sh').write_text(script)
     (tests / 'test.sh').chmod(0o755)
     hashes = {str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest()
-              for p in (source / 'task.json', source / 'instruction.md', source / 'tests/oracle.json')}
+              for p in sorted(source.rglob('*')) if p.is_file() and p.name != 'reference.circ' and '__pycache__' not in p.parts}
     (output / 'provenance.json').write_text(json.dumps({'source': hashes, 'agent_image': agent_image, 'verifier_image': verifier_image}, indent=2))
     return output
 

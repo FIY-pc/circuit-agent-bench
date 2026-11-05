@@ -45,6 +45,10 @@ def source_identity(tree):
         if not path:
             raise ValueError('A source snapshot requires VIBE_BENCH_SOURCE_MANIFEST')
         identity = json.loads(Path(path).read_text())
+        for name, expected in identity.get('files', {}).items():
+            path = root / name
+            if path.is_symlink() or not path.is_file() or sha(path) != expected:
+                raise ValueError('Product snapshot changed: ' + name)
         if identity['binarySha256'] != sha(tree.host_binary()):
             raise ValueError('Snapshot host binary differs from its manifest')
         return identity
@@ -74,16 +78,19 @@ def execute(task, fixture, instruction, tree, output, *, model, effort, context_
     for name in list(os.environ):
         if name.startswith('VIBE_TEST_'):
             os.environ.pop(name)
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
     identity = source_identity(tree)
     frozen_task = {**task, 'prompt': instruction}
-    manifest = {'schema': 'circuits-bench.trial/v2', 'task': task['id'],
+    manifest = {'schema': 'circuit-agent-bench.trial/v1', 'task': task['id'],
                 'execution': 'real-model', 'isolation': isolation,
                 'model': {'requestedId': model, 'effort': effort, 'api': api, 'contextWindow': context_window},
                 'harness': identity, 'inputSha256': digest_tree(fixture),
                 'taskContractSha256': hashlib.sha256(json.dumps(task, sort_keys=True).encode()).hexdigest(),
                 'instructionSha256': hashlib.sha256(instruction.encode()).hexdigest(),
                 'adapterSha256': sha(__file__)}
-    with MeterProxy(base, key) as proxy:
+    (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    with MeterProxy(base, key, output / 'request-events.jsonl') as proxy:
         service = {'id': 'bench', 'name': 'bench', 'baseUrl': proxy.url, 'apiKey': 'local-proxy',
                    'model': model, 'models': [model], 'effort': effort,
                    'contextWindow': context_window, 'api': api, 'vision': True}
@@ -92,8 +99,15 @@ def execute(task, fixture, instruction, tree, output, *, model, effort, context_
     rows = sorted(proxy.rows, key=lambda r: r['request'])
     (output / 'requests.jsonl').write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in rows))
     manifest['model']['reportedIds'] = sorted({r['modelReported'] for r in rows if r.get('modelReported')})
-    manifest['resultSha256'] = digest_tree(output / 'result')
-    manifest['harnessUnchanged'] = source_identity(tree) == identity
+    try:
+        manifest['resultSha256'] = digest_tree(output / 'result')
+    except ValueError:
+        manifest['resultSha256'] = None
+        manifest['artifactWarning'] = 'Artifact contains symlinks; verifier must reject it'
+    try:
+        manifest['harnessUnchanged'] = source_identity(tree) == identity
+    except ValueError:
+        manifest['harnessUnchanged'] = False
     (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
     result['meter'] = usage_totals(rows)
     # Distinguish agent failures from requests that failed at the provider.

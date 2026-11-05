@@ -6,7 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "circuit-agent-bench"
 version = "0.1.0"
 description = "Task-based evaluation of AI agents building digital circuits"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
+license = "GPL-3.0-only"
 dependencies = []
 
 [project.optional-dependencies]

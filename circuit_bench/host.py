@@ -1,26 +1,7 @@
-"""The vibe-logisim implementation bench measures, and its headless host.
+"""Version-selected Vibe Logisim source and its headless host.
 
-Which implementation (`Tree.resolve`):
-
-  default     the tree bench/ sits in (its parent directory)
-  --tree P    another local vibe-logisim tree
-  --ref R     a tag, branch or commit: cloned into the cache
-              (~/.cache/vibe-bench/trees/<sha>, `VIBE_BENCH_CACHE` moves it),
-              `npm ci`, `npm run setup`, `cargo build --release`. The source
-              repository is only read; a ref it does not know is cloned from
-              the public repository (`VIBE_BENCH_REPO` overrides the URL).
-
-`VIBE_BENCH_TREE` / `VIBE_BENCH_REF` stand in for --tree / --ref (scripts
-and tests without those options). A local tree's host is built with
-`cargo build --release` in that tree (a no-op when it is current);
-`VIBE_BENCH_HOST=<binary>` uses a binary as is.
-Every run records `Tree.describe()`: commit, ref name, whether the tree had
-uncommitted changes, and which of the three ways chose it.
-
-    tree = Tree.resolve()
-    with Host(tree) as host:
-        doc = host.call('open', path='/home/user/x.circ')
-        host.call('observe', id=doc['id'], revision=doc['revision'], circuit='main')
+A tree is explicit; refs are fetched into a separate cache. The candidate and
+verifier choose their trees independently. No working checkout is switched.
 """
 from __future__ import annotations
 
@@ -42,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 BENCH = Path(__file__).resolve().parents[1]
-CACHE = Path(os.environ.get('VIBE_BENCH_CACHE') or Path.home() / '.cache' / 'vibe-bench')
+CACHE = Path(os.environ.get('VIBE_BENCH_CACHE') or Path.home() / '.cache' / 'circuit-agent-bench')
 PUBLIC_REPO = 'https://github.com/FIY-pc/vibe-logisim.git'
 EXE = '.exe' if os.name == 'nt' else ''
 RUNTIME_FILES = {'logisim.jar': 'Logisim-ITA.jar', 'logisim-2.15': 'logisim-ita-cn-20200118.exe'}
@@ -113,7 +94,9 @@ class Tree:
             raise SystemExit('--tree 和 --ref 只能给一个')
         if ref:
             return cls._from_ref(ref)
-        root = Path(tree).expanduser().resolve() if tree else BENCH.parent
+        if not tree:
+            raise ValueError('Select a product with --tree or --ref (or VIBE_BENCH_TREE/REF)')
+        root = Path(tree).expanduser().resolve()
         if not (root / 'crates/workbench-host').is_dir() or not (root / 'packages/agent-runtime').is_dir():
             how = '' if tree else '（bench 的上一级）'
             raise SystemExit(f'{root}{how} 不是重写版 vibe-logisim 的源码树（没有 crates/workbench-host）；'
@@ -125,36 +108,23 @@ class Tree:
 
     @classmethod
     def _from_ref(cls, ref):
-        source = BENCH.parent
-        sha = _git(source, 'rev-parse', '--verify', '--quiet', f'{ref}^{{commit}}')
-        trees = CACHE / 'trees'
-        if sha and (trees / sha / '.git').exists():
-            return cls(trees / sha, 'ref', ref, sha, False)._prepare()
-        trees.mkdir(parents=True, exist_ok=True)
-        scratch = Path(tempfile.mkdtemp(prefix='clone-', dir=trees))
+        if ref.startswith('-') or any(c.isspace() for c in ref):
+            raise ValueError('Invalid product ref')
+        url = os.environ.get('VIBE_BENCH_REPO') or PUBLIC_REPO
+        repos = CACHE / 'repositories' / hashlib.sha256(url.encode()).hexdigest()[:16]
+        repos.parent.mkdir(parents=True, exist_ok=True)
         git = _tool('git')
-        try:
-            if sha:
-                # A local clone hardlinks the objects and only reads the source.
-                _run([git, 'clone', '-q', '--no-checkout', source, scratch / 'tree'])
-                if _git(scratch / 'tree', 'cat-file', '-e', f'{sha}^{{commit}}') is None:
-                    _run([git, '-C', scratch / 'tree', 'fetch', '-q', '--no-tags', source, '+refs/*:refs/bench-source/*'])
-            else:
-                url = os.environ.get('VIBE_BENCH_REPO') or PUBLIC_REPO
-                _run([git, 'clone', '-q', '--no-checkout', url, scratch / 'tree'])
-                sha = (_git(scratch / 'tree', 'rev-parse', '--verify', '--quiet', f'{ref}^{{commit}}')
-                       or _git(scratch / 'tree', 'rev-parse', '--verify', '--quiet', f'origin/{ref}^{{commit}}'))
-                if not sha:
-                    raise SystemExit(f'本地仓库和 {url} 里都没有 {ref}')
-            _run([git, '-C', scratch / 'tree', 'checkout', '-q', '--detach', sha])
-            target = trees / sha
-            if not (target / '.git').exists():
-                if target.exists():
-                    shutil.rmtree(target)
-                (scratch / 'tree').rename(target)
-        finally:
-            shutil.rmtree(scratch, ignore_errors=True)
-        return cls(trees / sha, 'ref', ref, sha, False)._prepare()
+        if not repos.exists():
+            _run([git, 'init', '--bare', repos])
+        _run([git, '-C', repos, 'fetch', '--depth=1', url, ref])
+        sha = _git(repos, 'rev-parse', 'FETCH_HEAD')
+        target = CACHE / 'trees' / sha
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            _run([git, '-C', repos, 'worktree', 'add', '--detach', target, sha])
+        if _git(target, 'status', '--porcelain'):
+            raise ValueError('Cached ref tree has changes; use a new VIBE_BENCH_CACHE')
+        return cls(target, 'ref', ref, sha, False)._prepare()
 
     def _prepare(self):
         """Dependencies, runtimes and the release host of a cached tree, once."""
@@ -182,9 +152,10 @@ class Tree:
         `npm run setup` finds them in place instead of downloading."""
         lock = json.loads((self.root / 'config/runtime-lock.json').read_text(encoding='utf-8'))
         cache = self.root / '.workbench-cache'
-        worktrees = [Path(line[9:]) for line in (_git(BENCH.parent, 'worktree', 'list', '--porcelain') or '').splitlines()
-                     if line.startswith('worktree ')]
-        donors = [d / '.workbench-cache' for d in [BENCH.parent, *worktrees, *sorted((CACHE / 'trees').glob('*'))]]
+        donors = [self.root / '.workbench-cache']
+        if os.environ.get('VIBE_BENCH_RUNTIME_CACHE'):
+            donors.append(Path(os.environ['VIBE_BENCH_RUNTIME_CACHE']))
+        donors.extend(d / '.workbench-cache' for d in sorted((CACHE / 'trees').glob('*')))
         for artifact, name in RUNTIME_FILES.items():
             want = (lock.get('artifacts', {}).get(artifact) or {}).get('sha256')
             if not want or (cache / name).is_file():
@@ -301,9 +272,9 @@ class Host:
     def agent(self, method, timeout=900, **args):
         return self.call('agent', method=method, args=args, timeout=timeout)
 
-    def events(self):
+    def events(self, journal=None):
         """Open /api/events; returns an EventStream that collects every event."""
-        stream = EventStream(self.url)
+        stream = EventStream(self.url, journal=journal)
         self._streams.append(stream)
         return stream
 
@@ -358,7 +329,8 @@ class EventStream:
     """The host's server-sent events on a background thread: `events` grows
     as they arrive; `wait(predicate, timeout)` returns the first match."""
 
-    def __init__(self, url):
+    def __init__(self, url, journal=None):
+        self.journal = Path(journal) if journal else None
         self.events = []
         self.times = []   # arrival time of each event (time.time())
         self._cond = threading.Condition()
@@ -384,6 +356,9 @@ class EventStream:
                         with self._cond:
                             self.events.append(event)
                             self.times.append(time.time())
+                            if self.journal:
+                                with self.journal.open('a', encoding='utf-8') as f:
+                                    f.write(json.dumps({'t': self.times[-1], 'event': event}, ensure_ascii=False) + '\n')
                             self._cond.notify_all()
         except Exception as e:  # the host closed the stream
             self._error = e
