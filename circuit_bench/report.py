@@ -16,7 +16,7 @@ from .visual import digest, write_json
 
 SCHEMA = 'circuit-bench.report/v1'
 METRICS = ('input', 'output', 'cachedInput', 'reasoningOutput', 'requests', 'requestsWithUsage',
-           'httpErrors', 'toolCalls', 'failedCalls', 'commandFailures', 'elapsedMs',
+           'httpErrors', 'requestsWithoutUsage', 'toolCalls', 'failedCalls', 'commandFailures', 'elapsedMs',
            'circuitToolCalls', 'visualObservationCalls', 'verificationToolCalls',
            'peakRequestInputTokens', 'batchSuboperations', 'retries')
 OUTCOMES = ('completed', 'timeout', 'error', 'interrupted', 'unknown')
@@ -74,6 +74,7 @@ def _group(rows, fields):
         result.append({**dict(zip(fields, key)), 'attempts': len(items),
                        'functional': {s: functional[s] for s in FUNCTIONAL},
                        'passFractionAllAttempts': functional['passed']/len(items),
+                       'assessmentExcludedAttempts': sum(r['excludedFromCapabilityComparison'] for r in items),
                        'outcomes': dict(Counter(r['outcome'] for r in items)), 'metrics': _metric_summary(items),
                        'visualAxes': {axis: dict(Counter(r['visual']['axes'][axis] for r in items)) for axis in AXES}})
     return result
@@ -131,6 +132,32 @@ def _visual(run_dir, problems, grade, evidence_path=None):
     return result
 
 
+def observed_usage(run_dir, meter, problems):
+    keys = ('input', 'output', 'cachedInput', 'reasoningOutput')
+    observed = meter.get('observedTokens') if isinstance(meter.get('observedTokens'), dict) else {}
+    values = {key: _number(observed.get(key)) for key in keys}
+    if any(value is not None for value in values.values()):
+        return values, 'meter'
+    # Older interrupted runs may have only per-request observations. Normalize
+    # each independently through the meter; never overwrite incomplete totals.
+    path = run_dir / 'requests.jsonl'
+    if not path.is_file():
+        return values, 'unknown'
+    from .meter import usage_totals
+    parts = {key: [] for key in keys}
+    try:
+        for line in path.read_text().splitlines():
+            row = json.loads(line)
+            normalized = usage_totals([row])
+            for key in keys:
+                value = _number(normalized.get(key))
+                if value is not None:
+                    parts[key].append(value)
+    except (OSError, ValueError, TypeError, AttributeError):
+        problems.append('requests_unreadable_lower_bound_partial')
+    return {key: sum(items) if items else None for key, items in parts.items()}, 'requests'
+
+
 def read_attempt(run_dir, ordinal, tasks=None, context=None):
     run_dir = Path(run_dir)
     context = context or {}
@@ -148,6 +175,9 @@ def read_attempt(run_dir, ordinal, tasks=None, context=None):
     metrics.update({k: _number(ledger.get(k)) for k in ('toolCalls', 'failedCalls', 'commandFailures', 'circuitToolCalls',
                     'visualObservationCalls', 'verificationToolCalls', 'peakRequestInputTokens', 'batchSuboperations', 'retries')})
     metrics['elapsedMs'] = _number(run.get('elapsedMs'))
+    observed_tokens, observed_source = observed_usage(run_dir, meter, problems)
+    if metrics['requestsWithoutUsage'] is None and metrics['requests'] is not None and metrics['requestsWithUsage'] is not None:
+        metrics['requestsWithoutUsage'] = _number(metrics['requests']-metrics['requestsWithUsage'])
     model = manifest.get('model') if isinstance(manifest.get('model'), dict) else {}
     harness = manifest.get('harness') if isinstance(manifest.get('harness'), dict) else {}
     tool_counts = Counter()
@@ -165,7 +195,7 @@ def read_attempt(run_dir, ordinal, tasks=None, context=None):
            'family': _label(manifest.get('family') or context.get('family') or metadata.get('family'), 'family'),
            'model': _identity(model, 'model'), 'harness': _identity(harness, 'harness'),
            'outcome': run.get('outcome') if run.get('outcome') in OUTCOMES else 'unknown',
-           'functional': _functional(grade), 'metrics': metrics, 'toolsByName': dict(sorted(tool_counts.items())),
+           'functional': _functional(grade), 'metrics': metrics, 'observedTokens': observed_tokens, 'observedTokensSource': observed_source, 'toolsByName': dict(sorted(tool_counts.items())),
            'execution': manifest.get('execution') if manifest.get('execution') in ('real-model', 'scripted', 'synthetic') else 'unknown',
            'harnessUnchanged': manifest.get('harnessUnchanged') if isinstance(manifest.get('harnessUnchanged'), bool) else None,
            'visual': _visual(run_dir, problems, grade, context.get('evidencePath')), 'unknowns': problems,
@@ -199,6 +229,13 @@ def read_attempt(run_dir, ordinal, tasks=None, context=None):
         missing.append('real_model_execution')
     if context.get('experimentData'):
         experiment_pairing(row, manifest, context, conditions, missing)
+    assessments = context.get('assessments', [])
+    row['assessments'] = assessments
+    row['excludedFromCapabilityComparison'] = any(a['excludeFromCapabilityComparison'] for a in assessments)
+    row['rawInfrastructure'] = row['infrastructure']
+    if row['excludedFromCapabilityComparison']:
+        missing.append('assessment_excluded')
+        row['infrastructure'] = 'assessment_infrastructure_error' if any(a['status'] == 'infrastructure_error' for a in assessments) else 'assessment_excluded'
     row['executionCondition'] = ('planned-real-model' if context.get('experimentData') and row['execution'] in ('real-model', 'unknown') else row['execution'])
     row['pairingEligible'] = not missing
     row['pairingLimits'] = missing
@@ -413,19 +450,49 @@ def discover_attempts(roots):
         if not candidates and not experiment_paths:
             # An explicitly supplied empty attempt is still a row.
             found.setdefault(supplied, {})
+    assessment_paths = set()
+    for supplied in roots:
+        supplied = Path(supplied).resolve()
+        supplied = supplied.parent if supplied.is_file() else supplied
+        assessment_paths.update(supplied.rglob('assessment.json'))
+        # Direct episode inputs still honor their enclosing experiment assessment.
+        for ancestor in (supplied, *supplied.parents):
+            if (ancestor / 'experiment.json').is_file():
+                assessment_paths.update(p / 'assessment.json' for p in (supplied, *supplied.parents)
+                                        if p.is_relative_to(ancestor) and (p / 'assessment.json').is_file())
+                break
+    for path in sorted(assessment_paths):
+        assessment = _read(path, [], 'assessment')
+        public = {'id': 'assessment-' + digest(path)[:16],
+                  'status': assessment.get('status') if assessment.get('status') in ('infrastructure_error', 'valid', 'invalid') else 'unknown',
+                  'excludeFromCapabilityComparison': assessment.get('exclude_from_capability_comparison') is True,
+                  'retainUsage': True}
+        for episode, context in found.items():
+            if episode.is_relative_to(path.parent):
+                context.setdefault('assessments', []).append(public)
     return list(found.items())
 
 
 def aggregate(run_dirs, tasks=None):
     discovered = discover_attempts(run_dirs)
     rows = [read_attempt(path, i+1, tasks, context) for i, (path, context) in enumerate(discovered)]
+    included = [r for r in rows if not r['excludedFromCapabilityComparison']]
+    observed = {key: {'knownLowerBound': sum(r['observedTokens'][key] for r in rows if r['observedTokens'][key] is not None)
+                        if any(r['observedTokens'][key] is not None for r in rows) else None,
+                       'attemptsWithObservation': sum(r['observedTokens'][key] is not None for r in rows),
+                       'attemptsWithoutObservation': sum(r['observedTokens'][key] is None for r in rows)}
+                for key in ('input', 'output', 'cachedInput', 'reasoningOutput')}
     return {'schema': SCHEMA, 'attempts': rows, 'attemptCount': len(rows),
+            'assessmentExcludedAttempts': len(rows)-len(included),
+            'capabilityByTask': _group(included, ('task', 'model', 'candidate', 'harness', 'executionCondition')),
+            'capabilityByFamily': _group(included, ('family', 'model', 'candidate', 'harness', 'executionCondition')),
+            'observedTokenLowerBounds': observed,
             'executions': dict(Counter(r['execution'] for r in rows)),
             'byTask': _group(rows, ('task', 'model', 'candidate', 'harness', 'executionCondition')),
             'byFamily': _group(rows, ('family', 'model', 'candidate', 'harness', 'executionCondition')),
             'metrics': _metric_summary(rows), 'paired': paired_comparisons(rows),
             'limits': [
-                'All supplied attempts remain in denominators, including timeouts, errors and missing grades; pass fractions are observed pass / all attempts, not estimates for missing grades.',
+                'All supplied attempts remain in raw tables and cost totals. Explicit assessment exclusions are removed from capability tables and pairs, with their counts retained. Pass fractions are observed pass / the displayed denominator, not estimates for missing grades.',
                 'Unknown token fields are not zero. Cached input and reasoning output are subcategories, not extra tokens to add to input and output.',
                 'No monetary estimate without an explicit price schedule. Evaluation time and human review time are separate from construction costs.',
                 'Visual states are human judgments over recorded viewed evidence; missing reviews remain unknown. Geometry and coverage are not aesthetic scores.',
@@ -441,20 +508,25 @@ def render_html(report):
     parts = ['<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Circuit benchmark report</title><style>body{font:15px/1.5 system-ui,sans-serif;max-width:1400px;margin:32px auto;padding:0 24px;color:#1b2b3d;background:#fafbfd}h1{font-size:28px}h2{font-size:20px;margin-top:32px}.scroll{overflow:auto}table{border-collapse:collapse;background:white;width:100%}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #d5dce4;vertical-align:top}th{background:#eaf0f6}code{overflow-wrap:anywhere}.muted{color:#536476}li{margin-bottom:8px}</style>',
              '<h1>Circuit construction benchmark</h1>', f'<p>{report["attemptCount"]} attempts · Functional results, human visual judgments, and resource use are reported separately.</p>',
              '<p>Execution kinds: '+esc(json.dumps(report['executions']))+'. Synthetic and scripted rows test infrastructure, not model capability.</p>',
+             f'<p>{report["assessmentExcludedAttempts"]} attempts excluded from capability comparison by explicit assessment; their raw outcomes and all usage remain below.</p>',
              '<p class="muted">No best-of-k selection. Unknown is not zero. Models and harnesses use stable hashed aliases.</p>']
-    for title, field, key in [('Functional results by task', 'byTask', 'task'), ('Functional results by family', 'byFamily', 'family')]:
+    for title, field, key in [('Capability comparison by task', 'capabilityByTask', 'task'), ('Capability comparison by family', 'capabilityByFamily', 'family')]:
         parts.append('<h2>'+title+'</h2>')
         parts.append(table([key.title(), 'Model', 'Candidate', 'Harness', 'Execution condition', 'Attempts', 'Passed / all', 'Failed / invalid', 'Evaluator error / unknown'],
                            [[r[key], r['model'], r['candidate'], r['harness'], r['executionCondition'], r['attempts'], f'{r["functional"]["passed"]}/{r["attempts"]}',
                              f'{r["functional"]["failed"]}/{r["functional"]["invalid_artifact"]}',
                              f'{r["functional"]["evaluator_error"]}/{r["functional"]["unknown"]}'] for r in report[field]]))
     parts.append('<h2>Every attempt</h2>')
-    parts.append(table(['Attempt / task / job / candidate / repeat', 'Execution / outcome / function / infrastructure', 'Input / output', 'Cache / reasoning', 'Requests with usage / total', 'Tools / failed / HTTP errors', 'Seconds'],
+    parts.append(table(['Attempt / task / job / candidate / repeat', 'Execution / outcome / function / infrastructure', 'Input / output', 'Cache / reasoning', 'Requests with usage / total', 'Tools / failed / HTTP errors', 'Seconds', 'Assessment exclusion'],
                        [[r['attempt']+' / '+r['task']+' / '+r['job']+' / '+r['candidate']+' / '+str(r['repeat']), r['execution']+' / '+r['outcome']+' / '+r['functional']+' / '+r['infrastructure'],
                          f'{r["metrics"]["input"]} / {r["metrics"]["output"]}', f'{r["metrics"]["cachedInput"]} / {r["metrics"]["reasoningOutput"]}',
                          f'{r["metrics"]["requestsWithUsage"]} / {r["metrics"]["requests"]}',
                          f'{r["metrics"]["toolCalls"]} / {r["metrics"]["failedCalls"]} / {r["metrics"]["httpErrors"]}',
-                         r['metrics']['elapsedMs']/1000 if r['metrics']['elapsedMs'] is not None else 'unknown'] for r in report['attempts']]).replace('None','unknown'))
+                         r['metrics']['elapsedMs']/1000 if r['metrics']['elapsedMs'] is not None else 'unknown', r['excludedFromCapabilityComparison']] for r in report['attempts']]).replace('None','unknown'))
+    parts.append('<h2>Observed tokens: lower bounds only</h2><p>Interrupted or unmetered requests keep full totals unknown. These are sums actually observed, not complete cost estimates. Cache and reasoning are subcategories.</p>')
+    parts.append(table(['Attempt', 'Observed input', 'Observed output', 'Observed cache', 'Observed reasoning', 'Requests with / without / total usage'],
+                       [[r['attempt'], *[r['observedTokens'][k] if r['observedTokens'][k] is not None else 'unknown' for k in ('input', 'output', 'cachedInput', 'reasoningOutput')],
+                         f'{r["metrics"]["requestsWithUsage"]} / {r["metrics"]["requestsWithoutUsage"]} / {r["metrics"]["requests"]}'] for r in report['attempts']]).replace('None','unknown'))
     parts.append('<h2>Human visual review</h2>')
     parts.append(table(['Attempt', 'Collection / review', 'Inspected / captured / omitted tiles / unresolved dependencies / native unknowns', *[v[0] for v in AXES.values()], 'Human minutes / render seconds'],
                        [[r['attempt'], r['visual']['collection']+' / '+r['visual']['review'],

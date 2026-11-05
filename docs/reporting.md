@@ -36,15 +36,31 @@ jobs/<job>/<trial>/
 
 A missing trial becomes `missing_trial`; launcher failure and Harbor exceptions become explicit infrastructure states. An absent/unreadable episode manifest, run, grade, tool ledger, or review is recorded as a gap. No full exception text enters the summary. Entirely unrecorded attempts outside the supplied roots cannot be recovered; a supplied empty directory becomes one unknown row. An empty experiment manifest is also explicit.
 
-Task/family groups retain each candidate/model/harness and execution condition and count passed, failed, invalid artifact, evaluator error, and unknown separately. The displayed fraction is **observed functional passes / all supplied or scheduled attempts**, including missing trials. This does not assert that unknown grades failed their functional tests. A prepared real-model experiment groups missing infrastructure rows into its planned-real-model condition, while each row still shows actual execution as unknown until recorded. Synthetic/scripted executions remain separate. A completed agent turn is not a functional pass, and Harbor reward is not substituted for `grade.json`.
+Raw `byTask` / `byFamily` groups retain each candidate/model/harness and execution condition and count passed, failed, invalid artifact, evaluator error, and unknown separately. The displayed fraction is **observed functional passes / all supplied or scheduled attempts**, including missing trials. This does not assert that unknown grades failed their functional tests. A prepared real-model experiment groups missing infrastructure rows into its planned-real-model condition, while each row still shows actual execution as unknown until recorded. Synthetic/scripted executions remain separate. A completed agent turn is not a functional pass, and Harbor reward is not substituted for `grade.json`.
 
 ## Usage, visual coverage and privacy
 
-Construction usage reports raw input/output, cached input/reasoning output subcategories, request/usage coverage, HTTP errors, tool calls/failures, and elapsed time. Each aggregate includes the sum of known values and the count of unknown attempts. Missing cost is never silently zero; cached and reasoning tokens are not added again to their parent categories. Monetary conversion requires a separate explicit price schedule and is not guessed. Rendering time and human review minutes are separate from construction.
+Construction usage reports raw input/output, cached input/reasoning output subcategories, request/usage coverage, HTTP errors, tool calls/failures, and elapsed time. Each aggregate includes the sum of known values and the count of unknown attempts. Missing cost is never silently zero; cached and reasoning tokens are not added again to their parent categories. Monetary conversion requires a separate explicit price schedule and is not guessed. Rendering time and human review minutes are separate from construction. `observedTokens` is a separate lower bound of actually observed usage, never a replacement for unknown totals. `requestsWithoutUsage` makes partial coverage visible. For older runs without `observedTokens`, the reporter normalizes individual `requests.jsonl` records through the meter and labels the lower-bound source as `requests`; incomplete full totals remain unknown.
 
 Visual rows retain the six states, collection status, inspected/captured/omitted counts, and optional reading-probe outcomes. Missing reviews remain unknown. Invalid image hashes, mismatched evidence/artifact identities, or malformed judgments cannot become visual success. A report does not convert a human state into an objective aesthetic grade.
 
 The summary uses an allowlist of numbers, statuses, benchmark task/family/candidate IDs and hashed identity aliases. It excludes full prompts, response text, commands, provider/model IDs, local paths, exception messages, reviewer prose, and images. Exact IDs remain in the original private manifests; hashes are pseudonymous identifiers, not encryption. Benchmark identifiers should themselves be neutral public-safe labels. Do not publish raw experiment or episode directories just because the summary is shareable.
+
+## Infrastructure assessments
+
+An `assessment.json` at an experiment root or enclosing supplied results directory applies to every enclosed trial, including scheduled jobs with no trial. For example:
+
+```json
+{
+  "status": "infrastructure_error",
+  "exclude_from_capability_comparison": true,
+  "retain_usage": true
+}
+```
+
+The reporter preserves raw outcome, functional status, every usage observation and unknown total. It annotates each affected attempt with assessment identity/status, `excludedFromCapabilityComparison`, and `assessment_infrastructure_error`. `capabilityByTask`, `capabilityByFamily`, and paired comparisons exclude these attempts; raw `byTask`, `byFamily`, every-attempt rows and cost totals retain them. The HTML uses the capability groups and explicitly states the excluded count. Direct episode inputs still inherit an enclosing experiment assessment. Nested exclusions are cumulative; a child cannot silently re-enable an excluded parent.
+
+Assessment cause/intervention prose stays in the private file. The public summary keeps only status, exclusion and a hashed assessment ID. Usage is always retained, even if an assessment would request hiding it. This separates operator-stopped infrastructure failures from claims about model capability without erasing their cost.
 
 ## Fixed-model paired harness comparisons
 

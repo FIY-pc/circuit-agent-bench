@@ -275,6 +275,55 @@ class ReportCase(unittest.TestCase):
         self.assertNotIn('private-provider', json.dumps(result))
         self.assertEqual({r['attempts'] for r in result['byTask']}, {2})
         self.assertEqual(len(report.aggregate([experiment])['attempts']), 4)
+        visual.write_json(experiment / 'assessment.json', {'status': 'infrastructure_error',
+            'exclude_from_capability_comparison': True, 'retain_usage': True})
+        excluded = report.aggregate([experiment])
+        self.assertEqual(excluded['assessmentExcludedAttempts'], 4)
+        self.assertFalse(excluded['capabilityByTask'])
+        direct = report.aggregate([experiment / 'jobs/job-a/trial-1/agent/episode'])
+        self.assertTrue(direct['attempts'][0]['excludedFromCapabilityComparison'])
+
+
+    def test_assessment_exclusion_retains_raw_outcomes_and_observed_usage(self):
+        a = self.attempt('a', outcome='interrupted', passed=False)
+        b = self.attempt('b', harness='b')
+        visual.write_json(self.root / 'assessment.json', {'status': 'infrastructure_error',
+            'cause': 'private operator details', 'exclude_from_capability_comparison': True, 'retain_usage': True})
+        run = json.loads((a / 'run.json').read_text())
+        run['meter'].update(input=None, output=None, requestsWithoutUsage=1,
+                            observedTokens={'input': 41, 'output': 7, 'cachedInput': 8, 'reasoningOutput': 2})
+        visual.write_json(a / 'run.json', run)
+        result = report.aggregate([self.root])
+        self.assertEqual(result['attemptCount'], 2)
+        self.assertEqual(result['assessmentExcludedAttempts'], 2)
+        self.assertFalse(result['capabilityByTask'])
+        self.assertFalse(result['capabilityByFamily'])
+        self.assertFalse(result['paired']['comparisons'])
+        self.assertEqual(result['metrics']['input']['knownSum'], 100)
+        self.assertEqual(result['metrics']['input']['unknownAttempts'], 1)
+        self.assertEqual(result['observedTokenLowerBounds']['input']['knownLowerBound'], 41)
+        first = next(r for r in result['attempts'] if r['outcome'] == 'interrupted')
+        self.assertEqual(first['metrics']['requestsWithoutUsage'], 1)
+        self.assertEqual(first['metrics']['toolCalls'], 5)
+        self.assertEqual(first['infrastructure'], 'assessment_infrastructure_error')
+        self.assertIn('assessment_excluded', first['pairingLimits'])
+        self.assertIsNone(first['metrics']['input'])
+        page = report.render_html(result)
+        self.assertIn('lower bounds only', page)
+        self.assertNotIn('private operator details', json.dumps(result)+page)
+        self.assertEqual(sum(g['attempts'] for g in result['byTask']), 2)
+
+    def test_old_request_log_supplies_lower_bounds_without_replacing_unknown_totals(self):
+        a = self.attempt('a', outcome='interrupted')
+        run = json.loads((a / 'run.json').read_text())
+        run['meter'].update(input=None, output=None)
+        visual.write_json(a / 'run.json', run)
+        (a / 'requests.jsonl').write_text(json.dumps({'usage': {'prompt_tokens': 41, 'completion_tokens': 7}})+'\n'+json.dumps({'usage': None})+'\n')
+        result = report.aggregate([a])['attempts'][0]
+        self.assertIsNone(result['metrics']['input'])
+        self.assertEqual(result['observedTokens']['input'], 41)
+        self.assertEqual(result['observedTokensSource'], 'requests')
+        self.assertEqual(result['metrics']['requestsWithoutUsage'], 1)
 
     def test_invalid_review_is_unknown_and_cannot_override_function(self):
         a = self.attempt('a', passed=False)
