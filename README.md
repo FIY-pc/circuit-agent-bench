@@ -57,7 +57,11 @@ export VIBE_BENCH_API_KEY
 Copy `experiments/development.json` to a file under `.cache/`. Set the model's
 **actual** `context_window`, reasoning effort, API format, tasks and image names.
 The example's 200000 is illustrative, not an automatic limit. The benchmark adds
-no output-token cap and does not replace the product's context management.
+no arbitrary output-token cap and does not replace the product's context management.
+For `anthropic-messages`, also set `model.max_output` to the service's supported
+output capacity: that protocol requires it. No value is guessed. Its base URL is
+the SDK endpoint root (for example `https://your-service.example`); a trailing
+`/v1` is also accepted. Chat/Responses normally use a base ending in `/v1`.
 
 ```sh
 python -m circuit_bench experiment prepare .cache/my-experiment.json \

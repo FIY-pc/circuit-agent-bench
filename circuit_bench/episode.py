@@ -66,11 +66,15 @@ def source_identity(tree):
 
 
 def execute(task, fixture, instruction, tree, output, *, model, effort, context_window,
-            api='openai-completions', isolation='local-development'):
+            api='openai-completions', max_output=None, isolation='local-development'):
     if api not in ('openai-completions', 'openai-responses', 'anthropic-messages'):
         raise ValueError('Unsupported API format')
     if context_window <= 0:
         raise ValueError('Specify the chosen model context window; no benchmark default')
+    if max_output is not None and (type(max_output) is not int or max_output <= 0):
+        raise ValueError('max_output must be the model-supported positive output capacity')
+    if api == 'anthropic-messages' and max_output is None:
+        raise ValueError('Messages requires an explicit model-supported max_output capacity')
     # Pop credentials before starting children. The profile gets only a
     # loopback address and a placeholder. The proxy owns the actual secret.
     base = os.environ.pop('VIBE_BENCH_BASE_URL')
@@ -92,11 +96,15 @@ def execute(task, fixture, instruction, tree, output, *, model, effort, context_
                 'adapterFiles': {name: sha(Path(__file__).parent / name)
                     for name in ('episode.py','runner.py','host.py','meter.py')},
                 'serviceFingerprint': hashlib.sha256(base.rstrip('/').encode()).hexdigest()}
+    if max_output is not None:
+        manifest['model']['maxOutput'] = max_output
     (output / 'manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
-    with MeterProxy(base, key, output / 'request-events.jsonl') as proxy:
+    with MeterProxy(base, key, output / 'request-events.jsonl', api=api) as proxy:
         service = {'id': 'bench', 'name': 'bench', 'baseUrl': proxy.url, 'apiKey': 'local-proxy',
                    'model': model, 'models': [model], 'effort': effort,
                    'contextWindow': context_window, 'api': api, 'vision': True}
+        if max_output is not None:
+            service['maxOutput'] = max_output
         result = run_episode(frozen_task, Path(fixture), Path(output), tree, service=service)
     output = Path(output)
     rows = sorted(proxy.rows, key=lambda r: r['request'])
@@ -115,6 +123,7 @@ def execute(task, fixture, instruction, tree, output, *, model, effort, context_
     result['meter'] = usage_totals(rows)
     # Distinguish agent failures from requests that failed at the provider.
     result['meter']['httpErrors'] = sum(r['status'] is None or r['status'] >= 400 for r in rows)
+    result['meter']['transportErrors'] = sum(bool(r.get('transportError')) for r in rows)
     (output / 'run.json').write_text(json.dumps(result, ensure_ascii=False, indent=2))
     return result
 
@@ -132,11 +141,12 @@ def main():
     p.add_argument('--effort', required=True)
     p.add_argument('--context-window', type=int, required=True)
     p.add_argument('--api', default='openai-completions')
+    p.add_argument('--max-output', type=int, help='Actual model output capacity; required by Messages, otherwise omitted')
     p.add_argument('--isolation', choices=['local-development', 'sandbox-pilot', 'harbor'], default='local-development')
     a = p.parse_args()
     result = execute(json.loads(a.task.read_text()), a.input, a.instruction.read_text(),
                      Tree.resolve(a.tree, a.ref), a.output, model=a.model, effort=a.effort,
-                     context_window=a.context_window, api=a.api, isolation=a.isolation)
+                     context_window=a.context_window, api=a.api, max_output=a.max_output, isolation=a.isolation)
     print(json.dumps({'outcome': result['outcome'], 'cost': result['meter']}, ensure_ascii=False))
     return 0 if result['outcome'] in ('completed', 'timeout', 'interrupted') else 1
 

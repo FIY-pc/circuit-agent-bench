@@ -41,6 +41,49 @@ class MeterTests(unittest.TestCase):
         self.assertEqual(result['requestsWithUsage'], 1)
         self.assertIsNone(result['input'])
 
+    def test_messages_routing_and_partial_stream_accounting(self):
+        received = []
+        class Upstream(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_): pass
+            def do_POST(self):
+                received.append((self.path, self.rfile.read(int(self.headers['Content-Length']))))
+                self.send_response(200)
+                self.send_header('Content-Type', 'text/event-stream')
+                self.end_headers()
+                self.wfile.write(b'data: {"type":"message_start","message":{"model":"snapshot","usage":{"input_tokens":100,"output_tokens":1}}}\n\n')
+                # EOF before message_delta/message_stop is not final usage.
+        server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Upstream)
+        thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+        try:
+            body=b'{"model":"test","max_tokens":64000,"messages":[]}'
+            with MeterProxy(f'http://127.0.0.1:{server.server_port}', 'test-key', api='anthropic-messages') as proxy:
+                with urllib.request.urlopen(urllib.request.Request(proxy.url+'/v1/messages',data=body)) as response:
+                    response.read()
+            self.assertEqual(received,[('/v1/messages',body)])
+            self.assertFalse(proxy.rows[0]['usageComplete'])
+            self.assertEqual(proxy.rows[0]['transportError'],'incomplete_stream')
+            totals=usage_totals(proxy.rows)
+            self.assertIsNone(totals['output'])
+            self.assertEqual(totals['observedTokens']['output'],1)
+            self.assertEqual(totals['requestsWithCompleteUsage'],0)
+            self.assertEqual(totals['requestsWithPartialUsage'],1)
+        finally:
+            server.shutdown();server.server_close();thread.join()
+
+    def test_terminal_messages_usage_is_cumulative_and_complete(self):
+        meter=ResponseMeter()
+        for obj in [
+            {'type':'message_start','message':{'usage':{'input_tokens':100,'output_tokens':1}}},
+            {'type':'message_delta','usage':{'output_tokens':9}},
+            {'type':'message_stop'},
+        ]:
+            meter.feed(b'data: '+json.dumps(obj).encode()+b'\n\n')
+        meter.finish()
+        self.assertTrue(meter.terminal)
+        totals=usage_totals([{'usage':meter.usage,'usageComplete':True}])
+        self.assertEqual(totals['output'],9)
+        self.assertEqual(totals['requestsWithCompleteUsage'],1)
+
     def test_proxy_preserves_wire_payload_and_does_not_log_secret(self):
         received = []
         secret = 'test-secret-only-in-memory'

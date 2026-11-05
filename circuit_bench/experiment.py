@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import shutil
 import sys
-from circuit_bench.episode import digest_tree
+from circuit_bench.episode import digest_tree, sha
 from circuit_bench.package import package
 
 
@@ -22,6 +22,10 @@ def prepare(spec, root, output):
     model=spec['model']; model_id=model.get('id') or os.environ.get('VIBE_BENCH_MODEL')
     if not model_id or int(model['context_window'])<=0:
         raise ValueError('Exact model ID and context window are required')
+    if model.get('api') == 'anthropic-messages' and model.get('max_output') is None:
+        raise ValueError('Messages requires the actual model-supported max_output capacity')
+    if model.get('max_output') is not None and (type(model['max_output']) is not int or model['max_output'] <= 0):
+        raise ValueError('max_output must be a positive integer')
     candidates=spec['candidates']; tasks=spec['tasks']; repeats=spec.get('repeats',1)
     if not candidates or not tasks or repeats<1 or len(set(tasks))!=len(tasks):
         raise ValueError('Supply distinct tasks, candidates, and positive repeats')
@@ -60,15 +64,27 @@ def prepare(spec, root, output):
                     'agents':[{'import_path':'circuit_bench.harbor_agent:VibeLogisim',
                         'model_name':model_id,'skip_model_parsing':True,
                         'kwargs':{'context_window':int(model['context_window']),
-                                  'effort':model['effort'],'api':model.get('api','openai-completions')}}]}
+                                  'effort':model['effort'],'api':model.get('api','openai-completions'),
+                                  **({'max_output':model['max_output']} if model.get('max_output') is not None else {})}}]}
                 validated=JobConfig.model_validate(config)
                 target=output/'jobs-config'/f'{name}.json';target.parent.mkdir(exist_ok=True)
                 target.write_text(validated.model_dump_json(indent=2))
                 jobs.append({'name':name,'config':str(target.resolve()),'task':task_id,
-                             'candidate':alias,'repeat':repeat+1})
+                             'candidate':alias,'repeat':repeat+1,
+                             'configSha256':sha(target),'packageSha256':digest_tree(task_out)})
     frozen['jobs']=jobs
     (output/'experiment.json').write_text(json.dumps(frozen,ensure_ascii=False,indent=2))
     return frozen
+
+
+def validate_job(output, job):
+    config = Path(job['config'])
+    expected_config = (Path(output)/'jobs-config'/f"{job['name']}.json").resolve()
+    if config.resolve() != expected_config or not config.is_file() or sha(config) != job.get('configSha256'):
+        raise ValueError('Prepared job config changed or has no digest: '+job['name'])
+    package_path = Path(output)/'packages'/job['name']
+    if not package_path.is_dir() or digest_tree(package_path) != job.get('packageSha256'):
+        raise ValueError('Prepared task package changed or has no digest: '+job['name'])
 
 
 def run(output):
@@ -89,6 +105,7 @@ def run(output):
         job_dir=output/'jobs'/job['name']
         if job_dir.exists():
             print('Retaining existing attempt:',job['name'],flush=True);continue
+        validate_job(output, job)
         print('Running:',job['name'],flush=True)
         harbor = Path(sys.executable).parent / 'harbor'
         if not harbor.is_file():

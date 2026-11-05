@@ -41,9 +41,10 @@ not complete within the task budget. Model/provider failures, infrastructure
 errors and grader errors remain separate from wrong circuit behavior. An unknown,
 oscillating or incomplete signal does not pass a functional assertion.
 
-The metering proxy forwards request bodies unchanged and adds no output limit,
+The metering proxy forwards request bodies unchanged and adds no arbitrary output limit,
 retry policy or model remapping. Raw usage and reported model IDs are retained in
-private run data. Provider aliases may drift; exact snapshots are preferable.
+private run data. Protocol-required output capacity is explicitly configured from
+the chosen model capability, never guessed by the benchmark. Provider aliases may drift; exact snapshots are preferable.
 Monetary prices, if supplied by downstream analysis, need a dated price table.
 Judge-model costs must be separate from the candidate's costs.
 

@@ -16,7 +16,8 @@ from .visual import digest, write_json
 
 SCHEMA = 'circuit-bench.report/v1'
 METRICS = ('input', 'output', 'cachedInput', 'reasoningOutput', 'requests', 'requestsWithUsage',
-           'httpErrors', 'requestsWithoutUsage', 'toolCalls', 'failedCalls', 'commandFailures', 'elapsedMs',
+           'httpErrors', 'transportErrors', 'requestsWithCompleteUsage', 'requestsWithPartialUsage',
+           'requestsWithoutUsage', 'toolCalls', 'failedCalls', 'commandFailures', 'elapsedMs',
            'circuitToolCalls', 'visualObservationCalls', 'verificationToolCalls',
            'peakRequestInputTokens', 'batchSuboperations', 'retries')
 OUTCOMES = ('completed', 'timeout', 'error', 'interrupted', 'unknown')
@@ -296,6 +297,8 @@ def experiment_pairing(row, manifest, context, conditions, missing):
     planned = experiment.get('model', {})
     planned_model = {'requestedId': planned.get('id'), 'api': planned.get('api', 'openai-completions'),
                      'effort': planned.get('effort'), 'contextWindow': planned.get('context_window')}
+    if planned.get('max_output') is not None:
+        planned_model['maxOutput'] = planned['max_output']
     row['observedModel'] = row['model']
     row['model'] = _identity(planned_model, 'model')
     candidate = next((c for c in experiment.get('candidates', []) if c.get('id') == context.get('candidate')), {})

@@ -15,11 +15,12 @@ from harbor.models.agent.context import AgentContext
 
 
 class VibeLogisim(BaseInstalledAgent):
-    def __init__(self, *args, effort='high', context_window=None, api='openai-completions', **kwargs):
+    def __init__(self, *args, effort='high', context_window=None, api='openai-completions', max_output=None, **kwargs):
         super().__init__(*args, **kwargs)
         if not context_window or int(context_window) <= 0:
             raise ValueError('context_window is required for the selected model')
         self.effort, self.context_window, self.api = effort, int(context_window), api
+        self.max_output = max_output
 
     @staticmethod
     def name():
@@ -40,6 +41,8 @@ class VibeLogisim(BaseInstalledAgent):
                    '--tree', '/opt/product', '--output', '/logs/agent/episode',
                    '--model', self.model_name, '--effort', self.effort,
                    '--context-window', str(self.context_window), '--api', self.api, '--isolation', 'harbor']
+        if self.max_output is not None:
+            command += ['--max-output', str(self.max_output)]
         # Environment is passed through Harbor's scoped execution, not written
         # into a task, Dockerfile, job YAML or a product authentication profile.
         env = {k: os.environ[k] for k in ('VIBE_BENCH_BASE_URL', 'VIBE_BENCH_API_KEY')}
