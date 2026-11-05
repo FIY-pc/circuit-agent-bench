@@ -1,5 +1,7 @@
 # Circuit Agent Bench
 
+[中文快速开始](docs/quick-start-zh.md)
+
 Evaluate a real model and its agent harness by having them **build working digital
 circuits**. Tasks range from a full adder through modules and processors. Results
 separate functional correctness, visual readability and execution cost.
@@ -77,8 +79,27 @@ results. Harbor exceptions and model failures remain part of the record.
 - [Tasks and functional coverage](docs/tasks.md)
 - [Evaluation protocol and research sources](docs/protocol.md)
 - [Visual evidence and review](docs/visual-scoring.md)
+- [All-attempt reports and paired comparisons](docs/reporting.md)
 - [Task provenance and local calibration data](docs/data-policy.md)
 - [Implementation and validation status](docs/validation.md)
+
+Generate a compact HTML/JSON report, including failures and missing attempts:
+
+```sh
+python -m circuit_bench report runs/experiment-001 --out reports/experiment-001
+```
+
+For visual review, collect the saved circuit with the fixed verifier product:
+
+```sh
+python -m circuit_bench visual --tree /path/to/verifier-product \
+  --artifact /path/to/agent/episode/result/design.circ --out reports/circuit-001
+python -m circuit_bench review --evidence reports/circuit-001/evidence.json
+```
+
+Open the generated `index.html` or `review.html` in a browser. Export a completed
+review as `review.json` beside its evidence packet before aggregating it. Collect
+under the episode's `visual/` directory to have reports discover it automatically.
 
 Use `python -m circuit_bench --help` for commands, or append `--help` to a command.
 The visual/report commands can operate on saved artifacts without another model
