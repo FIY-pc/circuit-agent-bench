@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "kind": "cpu8",
+  "interface": [
+    {
+      "name": "CLK",
+      "width": 1,
+      "direction": "input"
+    },
+    {
+      "name": "RST",
+      "width": 1,
+      "direction": "input"
+    },
+    {
+      "name": "INST",
+      "width": 16,
+      "direction": "input"
+    },
+    {
+      "name": "MA",
+      "width": 4,
+      "direction": "input"
+    },
+    {
+      "name": "PC",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "R0",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "R1",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "R2",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "R3",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "HALTED",
+      "width": 1,
+      "direction": "output"
+    },
+    {
+      "name": "MD",
+      "width": 8,
+      "direction": "output"
+    }
+  ],
+  "seed": 938105
+}

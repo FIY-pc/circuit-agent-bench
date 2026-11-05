@@ -1,0 +1,6 @@
+{
+  "id": "cpu8",
+  "artifact": "design.circ",
+  "circuit": "main",
+  "timeout_minutes": 90
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "kind": "alu8",
+  "interface": [
+    {
+      "name": "A",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "B",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "OP",
+      "width": 3,
+      "direction": "input"
+    },
+    {
+      "name": "Y",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "C",
+      "width": 1,
+      "direction": "output"
+    },
+    {
+      "name": "Z",
+      "width": 1,
+      "direction": "output"
+    }
+  ],
+  "seed": 938105
+}

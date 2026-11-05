@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "kind": "register_file",
+  "interface": [
+    {
+      "name": "CLK",
+      "width": 1,
+      "direction": "input"
+    },
+    {
+      "name": "RST",
+      "width": 1,
+      "direction": "input"
+    },
+    {
+      "name": "WE",
+      "width": 1,
+      "direction": "input"
+    },
+    {
+      "name": "WA",
+      "width": 3,
+      "direction": "input"
+    },
+    {
+      "name": "WD",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "RA",
+      "width": 3,
+      "direction": "input"
+    },
+    {
+      "name": "RB",
+      "width": 3,
+      "direction": "input"
+    },
+    {
+      "name": "QA",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "QB",
+      "width": 8,
+      "direction": "output"
+    }
+  ],
+  "seed": 938105
+}

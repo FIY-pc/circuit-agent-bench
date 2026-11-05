@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "kind": "sorting_network",
+  "interface": [
+    {
+      "name": "X0",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "X1",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "X2",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "X3",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "X4",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "X5",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "X6",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "X7",
+      "width": 8,
+      "direction": "input"
+    },
+    {
+      "name": "Y0",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "Y1",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "Y2",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "Y3",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "Y4",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "Y5",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "Y6",
+      "width": 8,
+      "direction": "output"
+    },
+    {
+      "name": "Y7",
+      "width": 8,
+      "direction": "output"
+    }
+  ],
+  "seed": 938105
+}

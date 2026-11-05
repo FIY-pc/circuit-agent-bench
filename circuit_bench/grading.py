@@ -1,6 +1,6 @@
 """Grade a saved construction artifact using an explicitly selected product tree.
 
-python -m circuit_bench.grading --task v2/tasks/full-adder --artifact result/design.circ \
+python -m circuit_bench.grading --task tasks/full-adder --artifact result/design.circ \
     --tree /path/to/fixed/product --out grade.json
 
 No agent or model is started. The submitted directory is copied and reopened in
@@ -22,6 +22,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 from circuit_bench.host import Host, HostError, Tree
+from circuit_bench import task_oracles
 
 
 def digest(path):
@@ -158,8 +159,9 @@ def check_trace(report, scenario, expected, widths=None):
             # The native display may separate bit groups with spaces.
             binary = str(bits).replace(' ', '') if bits is not None else ''
             known = len(binary) == widths[name] and set(binary) <= {'0', '1'}
-            if not known or value != want:
-                failures.append({'kind': 'value', 'tick': point['tick'], 'signal': name,
+            if not known or value != want or int(binary, 2) != value:
+                kind = 'missing_signal' if not signal else 'unknown_value' if not known else 'value'
+                failures.append({'kind': kind, 'tick': point['tick'], 'signal': name,
                                  'expected': want, 'actual': value, 'bits': bits})
     return {'name': scenario['name'], 'status': 'failed' if failures else 'passed',
             'checks': sum(len(p['values']) for p in expected), 'failure_count': len(failures), 'failures': failures[:20]}
@@ -207,11 +209,12 @@ class Grader:
             oracle_path = task / 'tests/oracle.json'
             oracle = json.loads(oracle_path.read_text())
             report['task_id'] = metadata['id']
-            if oracle['schema_version'] != 1 or oracle['kind'] not in ('full_adder', 'counter4'):
+            if oracle['schema_version'] != 1 or oracle['kind'] not in ('full_adder', 'counter4', *task_oracles.INTERFACES):
                 raise ValueError('unsupported oracle')
             report['provenance'] = {
                 'product': self.identity, 'task_sha256': digest(task / 'task.json'),
                 'oracle_sha256': digest(oracle_path), 'grader_sha256': digest(__file__),
+                'task_oracles_sha256': digest(task_oracles.__file__),
             }
             stage = 'artifact'
             if not artifact.is_file():
@@ -278,7 +281,7 @@ class Grader:
                                 'status': 'passed' if not failures and transitions['status'] == 'passed' else 'failed',
                                 'checks': 16 + transitions['checks'], 'vectors': vector_result, 'transitions': transitions,
                             }
-                        else:
+                        elif oracle['kind'] == 'counter4':
                             output = next(p for p in interface['ports'] if p['name'] == 'Q')
                             cases = []
                             for scenario in oracle['scenarios']:
@@ -291,6 +294,24 @@ class Grader:
                                 raise ValueError('counter oracle has no scenarios')
                             report['function'] = {'status': 'passed' if all(c['status'] == 'passed' for c in cases) else 'failed',
                                 'cases': cases, 'checks': sum(c['checks'] for c in cases)}
+                        else:
+                            outputs = [p for p in interface['ports'] if p['direction'] == 'output']
+                            widths = {p['name']: p['width'] for p in outputs}
+                            groups = []
+                            for scenario, expected in task_oracles.cases(oracle):
+                                actual = self.host.call('trace', **args, ticks=scenario['ticks'],
+                                    inputs=scenario['inputs'], events=scenario['events'], buttons=[],
+                                    watches=[{'name': p['name'], 'component': p['component'], 'port': 0}
+                                             for p in outputs])
+                                groups.append(check_trace(actual, scenario, expected, widths))
+                            if not groups:
+                                raise ValueError('oracle produced no functional groups')
+                            report['function'] = {
+                                'status': 'passed' if all(g['status'] == 'passed' for g in groups) else 'failed',
+                                'groups': groups, 'checks': sum(g['checks'] for g in groups),
+                                'passed_groups': sum(g['status'] == 'passed' for g in groups),
+                                'total_groups': len(groups),
+                            }
                         report['passed'] = report['function']['status'] == 'passed'
                         report['status'] = 'passed' if report['passed'] else 'failed'
                 finally:

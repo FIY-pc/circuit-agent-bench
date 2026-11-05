@@ -1,0 +1,6 @@
+{
+  "id": "register-file",
+  "artifact": "design.circ",
+  "circuit": "main",
+  "timeout_minutes": 35
+}

@@ -1,0 +1,6 @@
+{
+  "id": "sorting-network",
+  "artifact": "design.circ",
+  "circuit": "main",
+  "timeout_minutes": 45
+}

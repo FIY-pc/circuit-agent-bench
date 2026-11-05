@@ -1,0 +1,6 @@
+{
+  "id": "alu8",
+  "artifact": "design.circ",
+  "circuit": "main",
+  "timeout_minutes": 25
+}
