@@ -9,28 +9,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-from circuit_bench.runner import run_episode
-from circuit_bench.host import Tree
+from circuit_bench.adapters.vibe_logisim.runner import run_episode
+from circuit_bench.adapters.vibe_logisim.host import Tree
+from circuit_bench.identity import sha, digest_tree
 from circuit_bench.meter import MeterProxy, usage_totals
-
-
-def sha(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def digest_tree(root):
-    """Input/output package identity, including filenames and bytes."""
-    root = Path(root)
-    h = hashlib.sha256()
-    for p in sorted(root.rglob('*')):
-        if p.is_symlink():
-            raise ValueError('Benchmark input/output packages must contain regular files, not symlinks')
-        if p.is_file() and '__pycache__' not in p.parts:
-            h.update(p.relative_to(root).as_posix().encode() + b'\0')
-            h.update(bytes.fromhex(sha(p)))
-    return h.hexdigest()
 
 
 def source_identity(tree):
@@ -41,9 +23,9 @@ def source_identity(tree):
     if proc.returncode:
         # Read-only source snapshots in sandboxes need no .git history. Their
         # externally prepared identity accompanies the snapshot, not the answer.
-        path = os.environ.get('VIBE_BENCH_SOURCE_MANIFEST')
+        path = os.environ.get('CIRCUIT_BENCH_SOURCE_MANIFEST')
         if not path:
-            raise ValueError('A source snapshot requires VIBE_BENCH_SOURCE_MANIFEST')
+            raise ValueError('A source snapshot requires CIRCUIT_BENCH_SOURCE_MANIFEST')
         identity = json.loads(Path(path).read_text())
         for name, expected in identity.get('files', {}).items():
             path = root / name
@@ -77,11 +59,8 @@ def execute(task, fixture, instruction, tree, output, *, model, effort, context_
         raise ValueError('Messages requires an explicit model-supported max_output capacity')
     # Pop credentials before starting children. The profile gets only a
     # loopback address and a placeholder. The proxy owns the actual secret.
-    base = os.environ.pop('VIBE_BENCH_BASE_URL')
-    key = os.environ.pop('VIBE_BENCH_API_KEY')
-    for name in list(os.environ):
-        if name.startswith('VIBE_TEST_'):
-            os.environ.pop(name)
+    base = os.environ.pop('CIRCUIT_BENCH_BASE_URL')
+    key = os.environ.pop('CIRCUIT_BENCH_API_KEY')
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     identity = source_identity(tree)
@@ -92,9 +71,10 @@ def execute(task, fixture, instruction, tree, output, *, model, effort, context_
                 'harness': identity, 'inputSha256': digest_tree(fixture),
                 'taskContractSha256': hashlib.sha256(json.dumps(task, sort_keys=True).encode()).hexdigest(),
                 'instructionSha256': hashlib.sha256(instruction.encode()).hexdigest(),
-                'adapterSha256': sha(__file__),
+                'adapter': 'vibe-logisim', 'adapterSha256': sha(__file__),
+                'meterSha256': sha(Path(__file__).resolve().parents[2] / 'meter.py'),
                 'adapterFiles': {name: sha(Path(__file__).parent / name)
-                    for name in ('episode.py','runner.py','retention.py','host.py','meter.py')},
+                    for name in ('episode.py','runner.py','retention.py','host.py')},
                 'serviceFingerprint': hashlib.sha256(base.rstrip('/').encode()).hexdigest()}
     if max_output is not None:
         manifest['model']['maxOutput'] = max_output
@@ -137,7 +117,7 @@ def main():
     group.add_argument('--tree')
     group.add_argument('--ref')
     p.add_argument('--output', type=Path, required=True)
-    p.add_argument('--model', default=os.environ.get('VIBE_BENCH_MODEL'), required=not bool(os.environ.get('VIBE_BENCH_MODEL')))
+    p.add_argument('--model', default=os.environ.get('CIRCUIT_BENCH_MODEL'), required=not bool(os.environ.get('CIRCUIT_BENCH_MODEL')))
     p.add_argument('--effort', required=True)
     p.add_argument('--context-window', type=int, required=True)
     p.add_argument('--api', default='openai-completions')

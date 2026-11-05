@@ -13,8 +13,8 @@ import tempfile
 import threading
 import time
 from pathlib import Path
-from circuit_bench.host import Host, Tree
-from circuit_bench.retention import NativeTranscript, process_identity, retain_outputs, write_json
+from circuit_bench.adapters.vibe_logisim.host import Host, Tree
+from circuit_bench.adapters.vibe_logisim.retention import NativeTranscript, process_identity, retain_outputs, write_json
 
 FILE_TOOLS = {'read_file', 'write_file', 'list_files', 'exec_command'}
 
@@ -91,7 +91,7 @@ def _run_episode(task, fixture: Path, run_dir: Path, tree: Tree, *, service):
         raise ValueError('Product profile must use the in-memory proxy')
     # Harbor uses its collected artifact directory as the live workspace. Local
     # episodes use result/ directly. Neither depends on an end-of-turn copy.
-    folder = Path(os.environ.get('VIBE_BENCH_PROJECT_DIR') or run_dir / 'result').resolve()
+    folder = Path(os.environ.get('CIRCUIT_BENCH_PROJECT_DIR') or run_dir / 'result').resolve()
     state = Path(tempfile.mkdtemp(prefix='circuit-state-'))
     timeout = 60 * task['timeout_minutes']
     outcome, error, final, usage = 'error', None, None, None
@@ -111,7 +111,7 @@ def _run_episode(task, fixture: Path, run_dir: Path, tree: Tree, *, service):
         profile_file.write_text(json.dumps({'version': 2, 'defaultId': service['id'], 'services': [service]}))
         profile_file.chmod(0o600)
         setup = {'task': task['id'], 'model': service['model'], 'effort': service['effort'],
-                 'api': service['api'], 'vibeLogisim': tree.describe(),
+                 'api': service['api'], 'harness': {'adapter': 'vibe-logisim', **tree.describe()},
                  'started': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
         write_json(run_dir / 'setup.json', setup)
         transcript = NativeTranscript(state, run_dir)

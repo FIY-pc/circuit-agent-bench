@@ -72,11 +72,11 @@ python3 -m unittest discover -s tests -v
 Native tests are opt-in, serial, and reuse one host. Set product paths for your machine, then use a bounded memory scope:
 
 ```sh
-export VIBE_BENCH_TREE=/path/to/verifier-product
-export VIBE_BENCH_HOST=/path/to/vibe-workbench-host
-export VIBE_LOGISIM_NODE=/path/to/node
+export CIRCUIT_BENCH_TREE=/path/to/verifier-product
+export CIRCUIT_BENCH_HOST=/path/to/vibe-workbench-host
+export CIRCUIT_BENCH_NODE=/path/to/node
 systemd-run --user --scope -q -p MemoryMax=8G timeout 900 \
-  env VIBE_BENCH_NATIVE=1 VIBE_BENCH_NATIVE_REPORT=/tmp/task-suite-native.json \
+  env CIRCUIT_BENCH_NATIVE=1 CIRCUIT_BENCH_NATIVE_REPORT=/tmp/task-suite-native.json \
   python3 -m unittest discover -s tests -p 'test_tasks_native.py' -v
 ```
 

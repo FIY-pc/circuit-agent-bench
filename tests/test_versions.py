@@ -4,9 +4,9 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 import unittest
-from circuit_bench.host import Tree
+from circuit_bench.adapters.vibe_logisim.host import Tree
 from circuit_bench.experiment import prepare, validate_job
-from circuit_bench.episode import sha, digest_tree
+from circuit_bench.identity import sha, digest_tree
 
 class VersionTests(unittest.TestCase):
     def test_changed_prepared_model_and_instruction_are_refused(self):
@@ -35,7 +35,7 @@ class VersionTests(unittest.TestCase):
             subprocess.run(['git','-C',str(source),'commit','-qm','Initial fixture'],check=True)
             subprocess.run(['git','-C',str(source),'tag','v1'],check=True)
             (source/'file').write_text('working change')
-            with patch('circuit_bench.host.CACHE',cache),patch.dict('os.environ',{'VIBE_BENCH_REPO':str(source)}),patch.object(Tree,'_prepare',lambda self:self):
+            with patch('circuit_bench.adapters.vibe_logisim.host.CACHE',cache),patch.dict('os.environ',{'CIRCUIT_BENCH_REPO':str(source)}),patch.object(Tree,'_prepare',lambda self:self):
                 tree=Tree.resolve(ref='v1')
                 self.assertEqual((tree.root/'file').read_text(),'original')
                 self.assertEqual((source/'file').read_text(),'working change')
@@ -51,9 +51,9 @@ class VersionTests(unittest.TestCase):
             self.skipTest('Harbor extra not installed')
         root=Path(__file__).resolve().parents[1]
         spec={'model':{'id':'exact-model','effort':'high','context_window':123456},
-              'candidates':[{'id':'a','image':'candidate:a'},{'id':'b','image':'candidate:b'}],
+              'candidates':[{'id':'a','image':'candidate:a','adapter':'vibe-logisim'},{'id':'b','image':'candidate:b','adapter':'vibe-logisim'}],
               'verifier_image':'verifier:fixed','tasks':['full-adder','counter4'],'repeats':2}
-        with tempfile.TemporaryDirectory() as temp,patch('circuit_bench.experiment.subprocess.check_output',return_value=b'[{"Id":"sha256:fixed"}]'),patch.dict('os.environ',{'VIBE_BENCH_API_KEY':'secret-sentinel','VIBE_BENCH_BASE_URL':'https://private.example/v1'}):
+        with tempfile.TemporaryDirectory() as temp,patch('circuit_bench.experiment.subprocess.check_output',return_value=b'[{"Id":"sha256:fixed"}]'),patch.dict('os.environ',{'CIRCUIT_BENCH_API_KEY':'secret-sentinel','CIRCUIT_BENCH_BASE_URL':'https://private.example/v1'}):
             output=Path(temp)/'experiment'
             frozen=prepare(spec,root,output)
             self.assertEqual(len(frozen['jobs']),8)

@@ -299,13 +299,19 @@ def experiment_pairing(row, manifest, context, conditions, missing):
                      'effort': planned.get('effort'), 'contextWindow': planned.get('context_window')}
     if planned.get('max_output') is not None:
         planned_model['maxOutput'] = planned['max_output']
+    # Per-adapter annotations (e.g. Pi's vision field) are not different models.
+    # Use frozen common conditions for cross-harness pairs, while keeping actual
+    # provider model IDs and capability settings distinct.
+    capabilities = {k: planned[k] for k in ('vision', 'compat', 'thinking_level_map') if k in planned}
+    comparable_model = {**planned_model, **({'capabilities': capabilities} if capabilities else {})}
     row['observedModel'] = row['model']
-    row['model'] = _identity(planned_model, 'model')
+    row['model'] = _identity(comparable_model, 'model')
     candidate = next((c for c in experiment.get('candidates', []) if c.get('id') == context.get('candidate')), {})
     images = experiment.get('images', {})
     image_id = images.get(candidate.get('image'))
     row['observedHarness'] = row['harness']
-    row['harness'] = _identity(image_id, 'harness')
+    row['harness'] = _identity({'image': image_id, 'adapter': candidate.get('adapter'),
+                               'agent': candidate.get('agent')}, 'harness') if image_id else 'unknown'
     row['pair'] = _identity([context['experiment'], context.get('task'), context.get('repeat')], 'pair')
     task_digest = experiment.get('tasks', {}).get(context.get('task'))
     verifier_image = images.get(experiment.get('verifier_image'))
@@ -330,6 +336,8 @@ def experiment_pairing(row, manifest, context, conditions, missing):
     observed = manifest.get('model', {})
     if not isinstance(observed, dict) or any(observed.get(k) != v for k, v in planned_model.items()):
         missing.append('planned_observed_model_mismatch')
+    conditions['model'] = {**comparable_model,
+                           'reportedIds': observed.get('reportedIds') if isinstance(observed, dict) else None}
 
 
 def _harbor_job(root, job, experiment, experiment_id, launch_code=None):

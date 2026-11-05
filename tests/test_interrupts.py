@@ -2,7 +2,7 @@
 import unittest
 
 from circuit_bench.grading import initial_report, record_error
-from circuit_bench.host import HostError
+from circuit_bench.adapters.vibe_logisim.host import HostError
 from circuit_bench.interrupt_oracle import InterruptCPU, EI, DI, IRET, setmask, cases
 from circuit_bench.task_oracles import encode
 

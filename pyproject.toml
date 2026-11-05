@@ -15,3 +15,7 @@ harbor = ["harbor==0.25.0"]
 
 [tool.setuptools.packages.find]
 include = ["circuit_bench*"]
+exclude = ["*.node_modules*"]
+
+[tool.setuptools.package-data]
+"circuit_bench.adapters.pi" = ["package.json", "package-lock.json"]

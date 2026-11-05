@@ -2,19 +2,22 @@
 
 A task is a practical circuit delivery request: instruction, starting project,
 explicit interface, functional specification and time budget. A trial is one
-fresh real-model conversation through the candidate product. An experiment
-fixes the model configuration and compares complete harness revisions on common
-tasks. A coherent tool or control-flow redesign is a valid experimental variable;
+fresh real-model attempt through a stated harness. A harness experiment fixes
+the model configuration; a model experiment fixes the harness, task set, verifier
+and execution budget. Model results describe capability under those conditions. A coherent tool or control-flow redesign is a valid experimental variable;
 its rationale belongs in one short experiment note, not artificial micro-ablations.
 
 ## Boundaries
 
 Harbor schedules and isolates trials, collects artifacts, and launches a separate
-verifier. Vibe Logisim owns its prompt, tools, compaction, retries and stopping.
-The adapter submits the original instruction, with no hints or intermediate
+verifier. The selected harness owns its prompt, tools, compaction, retries and stopping.
+The included Vibe Logisim adapter submits the original instruction, with no hints or intermediate
 corrections. Writing XML, scripts or custom helper tools is allowed. The verifier
 runs a separately selected, fixed product/runtime and judges saved artifacts.
-Reference circuits and test programs are absent from the agent image.
+Reference circuits and test programs are absent from the agent image. Current
+tasks use Logisim files and a fixed native verifier backend; candidate agents
+need only satisfy that artifact contract. They need not use the verifier product
+as their editing environment.
 
 Public task sources can become familiar to models. Filesystem separation prevents
 accidental answer exposure, not deliberate internet retrieval or training

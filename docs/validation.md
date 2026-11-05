@@ -22,7 +22,7 @@ pilots, not a capability ranking.
 
 ## Evaluators
 
-The integrated suite passed all 64 tests, including optional native rendering and
+The integrated suite passed all 68 tests, including optional native rendering and
 the actual product SDK against a local Messages fixture (no paid model). The native task suite exercised 44 artifacts through one
 serial host: seven correct references and an alternative sorting topology passed;
 29 functional mutants and three missing/unknown/oscillating-signal defects failed;
@@ -69,3 +69,55 @@ in local attempt reports rather than copied into this repository.
 - Visual dimensions have review anchors and integrity checks, but no calibrated
   automatic visual grader or established inter-rater reliability.
 - Finite programs and seeded vectors are fault detection, not equivalence proofs.
+
+## Harness boundary
+
+Benchmark-owned environment variables use `CIRCUIT_BENCH_*`. Source selection,
+product execution and transcript export are isolated in the Vibe Logisim adapter.
+An external Harbor fixture ran in an image without the product, submitted the
+unchanged empty task, and completed independent verification with an expected
+functional failure and no Harbor exception. Its report records `synthetic` and
+excludes it from model capability tables. This checks the integration boundary;
+it is not a second model-solving baseline.
+
+The rebuilt Vibe agent image passed native loading, rendering and simulation
+preflight. A fresh real-model full-adder trial through the extracted adapter
+passed all 402 functional checks and retained its native transcript, image and
+final request usage. Existing saved results remain readable after the adapter
+extraction.
+
+## Generic coding-agent baseline
+
+The independent Pi 1.5.0 image installs the original CLI and a locked dependency
+tree. It includes a checksum-pinned standard Logisim CLI and JDK, without the Vibe
+product or circuit-editing APIs. Tests exercise the
+actual CLI against a local scripted HTTP service: its four default tools, exact
+model/output capacities, tool failure accounting, timeout retention and native
+context compaction. The compaction test retains the original tool messages as well
+as the summary, and meters the summarization request. These are infrastructure
+tests, not model capability runs. CI runs these without provider credentials.
+
+The local integrated suite passed 74 tests including native evaluator/rendering,
+cross-harness model identity checks and the Pi CLI tests. Three initial real-model
+attempts used development images without a simulator: two full-adder attempts
+completed but failed independent simulation, and one counter attempt timed out.
+The first image also lacked `file` and the `python` alias. These attempts retain
+their original image identities, failures, native sessions and partial usage;
+they are not silently replaced by trials of the final environment. No manual
+corrections were supplied. This validates that CLI completion and functional
+success are recorded separately; it is not evidence of a model ranking.
+
+With the final environment, fresh unassisted full-adder and counter trials both
+completed and passed the separate offline verifier: 402 and 127 checks respectively.
+Both retained native sessions, live/final artifacts and stable harness identities,
+without Harbor exceptions or retention errors. The full-adder run recovered from
+one failed inference request through Pi's native retry. That request supplied no
+usage, so the aggregate token total remains unknown and observed usage is kept as
+a lower bound. The counter run has complete usage for every request. Overview and
+detail views were collected for both; human visual ratings remain unassigned.
+
+The Pi real-model pilot uses Chat Completions on Linux. Responses/Messages,
+Windows/WSL2 and a broad repeated-task capability study remain unverified for this
+adapter. The standard simulator is available through shell commands, without an
+integrated circuit-editing or observation API. That difference from a specialized
+circuit harness is part of the experimental condition.

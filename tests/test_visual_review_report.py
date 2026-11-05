@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from circuit_bench import report, review, visual
-from circuit_bench.host import Tree
+from circuit_bench.adapters.vibe_logisim.host import Tree
 
 # A real, tiny PNG; fake host changes only its IHDR dimensions for unit fixtures.
 PNG = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jKc0AAAAASUVORK5CYII=')
@@ -336,7 +336,7 @@ class ReportCase(unittest.TestCase):
         self.assertIn('visual_evidence_or_review_invalid', result['unknowns'])
 
 
-@unittest.skipUnless(os.environ.get('VIBE_BENCH_NATIVE_TREE'), 'set VIBE_BENCH_NATIVE_TREE for one sequential native host')
+@unittest.skipUnless(os.environ.get('CIRCUIT_BENCH_NATIVE_TREE'), 'set CIRCUIT_BENCH_NATIVE_TREE for one sequential native host')
 class NativeEvidence(unittest.TestCase):
     def test_large_extent_and_nested_definitions(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -345,7 +345,7 @@ class NativeEvidence(unittest.TestCase):
             package.mkdir()
             artifact = package / 'design.circ'
             artifact.write_text(PROJECT)
-            evidence = visual.collect(artifact, os.environ['VIBE_BENCH_NATIVE_TREE'], root / 'evidence')
+            evidence = visual.collect(artifact, os.environ['CIRCUIT_BENCH_NATIVE_TREE'], root / 'evidence')
             self.assertEqual(evidence['status'], 'complete', evidence)
             self.assertEqual(len(evidence['definitions']), 3)
             self.assertGreater(evidence['definitions'][0]['bounds']['width'], 8000)
@@ -361,7 +361,7 @@ class NativeEvidence(unittest.TestCase):
             (package / 'sub.circ').write_text(PROJECT)
             artifact = package / 'design.circ'
             artifact.write_text(PROJECT.replace('<main name="main"/>', '<lib name="7" desc="file#sub.circ"/><main name="main"/>').replace('<comp loc="(100,100)" name="child"/>', '<comp lib="7" loc="(100,100)" name="child"/>', 1))
-            evidence = visual.collect(artifact, os.environ['VIBE_BENCH_NATIVE_TREE'], root / 'evidence')
+            evidence = visual.collect(artifact, os.environ['CIRCUIT_BENCH_NATIVE_TREE'], root / 'evidence')
             self.assertEqual(evidence['status'], 'complete', evidence)
             self.assertEqual(len(evidence['definitions']), 5)
             self.assertEqual(evidence['unresolvedDependencies'], [])

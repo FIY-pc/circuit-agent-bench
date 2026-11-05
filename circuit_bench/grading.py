@@ -22,7 +22,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
-from circuit_bench.host import Host, HostError, Tree
+from circuit_bench.adapters.vibe_logisim.host import Host, HostError, Tree
 from circuit_bench import task_oracles, interrupt_oracle
 
 

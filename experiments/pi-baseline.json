@@ -1,0 +1,18 @@
+{
+  "question": "How well does the selected model build circuits with stock Pi file and shell tools?",
+  "phase": "development",
+  "track": "unassisted",
+  "model": {
+    "effort": "high",
+    "context_window": null,
+    "max_output": null,
+    "vision": true,
+    "api": "openai-completions"
+  },
+  "verifier_image": "circuit-verifier:baseline",
+  "candidates": [
+    {"id": "pi", "adapter": "pi", "image": "circuit-agent:pi"}
+  ],
+  "tasks": ["full-adder", "counter4"],
+  "repeats": 1
+}

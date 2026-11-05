@@ -22,8 +22,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-BENCH = Path(__file__).resolve().parents[1]
-CACHE = Path(os.environ.get('VIBE_BENCH_CACHE') or Path.home() / '.cache' / 'circuit-agent-bench')
+CACHE = Path(os.environ.get('CIRCUIT_BENCH_CACHE') or Path.home() / '.cache' / 'circuit-agent-bench')
 PUBLIC_REPO = 'https://github.com/FIY-pc/vibe-logisim.git'
 EXE = '.exe' if os.name == 'nt' else ''
 RUNTIME_FILES = {'logisim.jar': 'Logisim-ITA.jar', 'logisim-2.15': 'logisim-ita-cn-20200118.exe'}
@@ -89,13 +88,13 @@ class Tree:
     @classmethod
     def resolve(cls, tree=None, ref=None):
         if tree is None and ref is None:
-            tree, ref = os.environ.get('VIBE_BENCH_TREE') or None, os.environ.get('VIBE_BENCH_REF') or None
+            tree, ref = os.environ.get('CIRCUIT_BENCH_TREE') or None, os.environ.get('CIRCUIT_BENCH_REF') or None
         if tree and ref:
             raise SystemExit('--tree 和 --ref 只能给一个')
         if ref:
             return cls._from_ref(ref)
         if not tree:
-            raise ValueError('Select a product with --tree or --ref (or VIBE_BENCH_TREE/REF)')
+            raise ValueError('Select a product with --tree or --ref (or CIRCUIT_BENCH_TREE/REF)')
         root = Path(tree).expanduser().resolve()
         if not (root / 'crates/workbench-host').is_dir() or not (root / 'packages/agent-runtime').is_dir():
             how = '' if tree else '（bench 的上一级）'
@@ -110,7 +109,7 @@ class Tree:
     def _from_ref(cls, ref):
         if ref.startswith('-') or any(c.isspace() for c in ref):
             raise ValueError('Invalid product ref')
-        url = os.environ.get('VIBE_BENCH_REPO') or PUBLIC_REPO
+        url = os.environ.get('CIRCUIT_BENCH_REPO') or PUBLIC_REPO
         repos = CACHE / 'repositories' / hashlib.sha256(url.encode()).hexdigest()[:16]
         repos.parent.mkdir(parents=True, exist_ok=True)
         git = _tool('git')
@@ -123,7 +122,7 @@ class Tree:
             target.parent.mkdir(parents=True, exist_ok=True)
             _run([git, '-C', repos, 'worktree', 'add', '--detach', target, sha])
         if _git(target, 'status', '--porcelain'):
-            raise ValueError('Cached ref tree has changes; use a new VIBE_BENCH_CACHE')
+            raise ValueError('Cached ref tree has changes; use a new CIRCUIT_BENCH_CACHE')
         return cls(target, 'ref', ref, sha, False)._prepare()
 
     def _prepare(self):
@@ -153,8 +152,8 @@ class Tree:
         lock = json.loads((self.root / 'config/runtime-lock.json').read_text(encoding='utf-8'))
         cache = self.root / '.workbench-cache'
         donors = [self.root / '.workbench-cache']
-        if os.environ.get('VIBE_BENCH_RUNTIME_CACHE'):
-            donors.append(Path(os.environ['VIBE_BENCH_RUNTIME_CACHE']))
+        if os.environ.get('CIRCUIT_BENCH_RUNTIME_CACHE'):
+            donors.append(Path(os.environ['CIRCUIT_BENCH_RUNTIME_CACHE']))
         donors.extend(d / '.workbench-cache' for d in sorted((CACHE / 'trees').glob('*')))
         for artifact, name in RUNTIME_FILES.items():
             want = (lock.get('artifacts', {}).get(artifact) or {}).get('sha256')
@@ -170,7 +169,7 @@ class Tree:
     def host_binary(self) -> Path:
         if self._host:
             return self._host
-        explicit = os.environ.get('VIBE_BENCH_HOST')
+        explicit = os.environ.get('CIRCUIT_BENCH_HOST')
         if explicit:
             self._host = Path(explicit)
             return self._host
@@ -219,11 +218,11 @@ class Host:
         if not binary.is_file():
             raise SystemExit(f'找不到宿主程序 {binary}')
         if self.state is None:
-            self.state = Path(tempfile.mkdtemp(prefix='vibe-bench-host-'))
+            self.state = Path(tempfile.mkdtemp(prefix='circuit-bench-host-'))
             self._own_state = True
         self.state.mkdir(parents=True, exist_ok=True)
         _share_java(self.state, into_state=True)
-        env = {**os.environ, 'VIBE_WORKBENCH_STATE': str(self.state), 'VIBE_WORKBENCH_PORT': '0',
+        env = {**os.environ, 'VIBE_LOGISIM_NODE': os.environ.get('CIRCUIT_BENCH_NODE') or _tool('node'), 'VIBE_WORKBENCH_STATE': str(self.state), 'VIBE_WORKBENCH_PORT': '0',
                'VIBE_WORKBENCH_DEV_PORT': '0', 'VIBE_WORKBENCH_RESOURCES': str(self.tree.root), **self.extra_env}
         self._log = self.log_path.open('a', encoding='utf-8') if self.log_path else None
         kwargs = {'start_new_session': True} if os.name != 'nt' else {'creationflags': 0x00000200}

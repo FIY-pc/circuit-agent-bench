@@ -17,7 +17,7 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 
-from .host import Host, Tree
+from .adapters.vibe_logisim.host import Host, Tree
 
 SCHEMA = 'circuit-bench.visual/v1'
 

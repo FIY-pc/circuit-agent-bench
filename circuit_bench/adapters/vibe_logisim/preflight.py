@@ -1,7 +1,7 @@
 """Exercise native loading, component metadata, rendering and simulation, no model."""
 from pathlib import Path
 import tempfile
-from circuit_bench.host import Host,Tree
+from circuit_bench.adapters.vibe_logisim.host import Host,Tree
 
 PROJECT='''<?xml version="1.0" encoding="UTF-8"?>
 <project source="2.15.0.2.exe" version="1.0">

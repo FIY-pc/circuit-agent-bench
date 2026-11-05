@@ -3,8 +3,8 @@
 Collect from the **saved artifact**, with an independently fixed evaluator product. The collector opens a temporary copy, renders sequentially through one native host, and verifies both the original artifact and its package stayed unchanged. No model or credential is needed.
 
 ```bash
-export VIBE_BENCH_HOST=/path/to/fixed/vibe-workbench-host
-export VIBE_LOGISIM_NODE=/path/to/node
+export CIRCUIT_BENCH_HOST=/path/to/fixed/vibe-workbench-host
+export CIRCUIT_BENCH_NODE=/path/to/node
 systemd-run --user --scope -q -p MemoryMax=8G timeout 900 \
   python -m circuit_bench.visual \
   --tree /path/to/fixed/product \
