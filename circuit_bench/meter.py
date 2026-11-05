@@ -170,7 +170,9 @@ class MeterProxy:
                 meter = ResponseMeter()
                 try:
                     try:
-                        upstream = opener.open(request, timeout=600)
+                        # The product and trial own cancellation/deadlines.
+                        # A metering-only hop must not impose another request cap.
+                        upstream = opener.open(request, timeout=None)
                     except urllib.error.HTTPError as e:
                         upstream = e
                     with upstream:
