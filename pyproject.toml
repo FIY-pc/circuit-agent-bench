@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "circuit-agent-bench"
+version = "0.1.0"
+description = "Task-based evaluation of AI agents building digital circuits"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+harbor = ["harbor==0.25.0"]
+
+[tool.setuptools.packages.find]
+include = ["circuit_bench*"]

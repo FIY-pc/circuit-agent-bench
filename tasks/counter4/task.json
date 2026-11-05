@@ -1,0 +1,6 @@
+{
+  "id": "counter4",
+  "artifact": "design.circ",
+  "circuit": "main",
+  "timeout_minutes": 15
+}

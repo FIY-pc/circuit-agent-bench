@@ -1,0 +1,328 @@
+{
+  "schema_version": 1,
+  "kind": "counter4",
+  "interface": [
+    {
+      "name": "CLK",
+      "direction": "input",
+      "width": 1
+    },
+    {
+      "name": "RST",
+      "direction": "input",
+      "width": 1
+    },
+    {
+      "name": "Q",
+      "direction": "output",
+      "width": 4
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "reset-hold-edges-wrap",
+      "ticks": 128,
+      "inputs": {
+        "CLK": 0,
+        "RST": 1
+      },
+      "events": [
+        {
+          "tick": 2,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 3,
+          "input": "RST",
+          "value": 0
+        },
+        {
+          "tick": 5,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 7,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 9,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 11,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 13,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 14,
+          "input": "RST",
+          "value": 1
+        },
+        {
+          "tick": 16,
+          "input": "RST",
+          "value": 0
+        },
+        {
+          "tick": 17,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 18,
+          "input": "RST",
+          "value": 1
+        },
+        {
+          "tick": 20,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 22,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 24,
+          "input": "RST",
+          "value": 0
+        },
+        {
+          "tick": 25,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 27,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 28,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 30,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 32,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 35,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 38,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 40,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 41,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 44,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 46,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 48,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 51,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 54,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 55,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 57,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 59,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 62,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 65,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 67,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 68,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 71,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 73,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 75,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 78,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 81,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 82,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 84,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 86,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 89,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 92,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 94,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 95,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 98,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 100,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 102,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 105,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 108,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 109,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 111,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 113,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 116,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 119,
+          "input": "CLK",
+          "value": 0
+        },
+        {
+          "tick": 121,
+          "input": "CLK",
+          "value": 1
+        },
+        {
+          "tick": 122,
+          "input": "CLK",
+          "value": 0
+        }
+      ]
+    }
+  ]
+}

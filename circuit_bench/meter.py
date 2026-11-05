@@ -1,0 +1,178 @@
+"""Transparent inference forwarding; real credentials stay in this process.
+
+Request/response bodies are forwarded unchanged. No retry, model remapping,
+token cap, stream-options injection, or alternate agent loop. Usage comes from
+provider response fields; an absent usage record is unknown, never zero.
+"""
+from __future__ import annotations
+
+import hashlib
+import http.server
+import json
+import threading
+import time
+import urllib.error
+import urllib.request
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+class ResponseMeter:
+    def __init__(self, sse=True):
+        self.usage = None
+        self.model = None
+        self.buffer = b''
+        self.sse = sse
+
+    def object(self, obj):
+        if not isinstance(obj, dict):
+            return
+        nested = obj.get('response') or obj.get('message') or obj
+        if isinstance(nested, dict):
+            self.model = nested.get('model') or self.model
+            if isinstance(nested.get('usage'), dict):
+                self.usage = {**(self.usage or {}), **nested['usage']}
+        if isinstance(obj.get('usage'), dict):
+            self.usage = {**(self.usage or {}), **obj['usage']}
+
+    def feed(self, chunk):
+        self.buffer += chunk
+        if not self.sse:
+            return
+        while b'\n' in self.buffer:
+            line, self.buffer = self.buffer.split(b'\n', 1)
+            if line.startswith(b'data:'):
+                try:
+                    self.object(json.loads(line[5:]))
+                except (ValueError, UnicodeDecodeError):
+                    pass
+
+    def finish(self):
+        try:
+            self.object(json.loads(self.buffer.removeprefix(b'data:') if self.sse else self.buffer))
+        except (ValueError, UnicodeDecodeError):
+            pass
+
+
+def usage_totals(rows):
+    """Input includes cached input. Output includes reasoning when provider does.
+
+The raw usage records remain authoritative; cache/reasoning are subsets, not
+additional tokens to add to the total. Partial coverage has no total estimate.
+"""
+    totals = dict(input=0, output=0, cachedInput=0, reasoningOutput=0)
+    unknown = set()
+    observed = 0
+    for row in rows:
+        u = row.get('usage')
+        if not u:
+            unknown.update(totals)
+            continue
+        observed += 1
+        if 'prompt_tokens' in u:
+            values = {'input': u.get('prompt_tokens'), 'output': u.get('completion_tokens'),
+                      'cachedInput': (u.get('prompt_tokens_details') or {}).get('cached_tokens'),
+                      'reasoningOutput': (u.get('completion_tokens_details') or {}).get('reasoning_tokens')}
+        elif 'cache_read_input_tokens' in u or 'cache_creation_input_tokens' in u:
+            values = {'input': sum(u.get(k, 0) for k in ('input_tokens', 'cache_read_input_tokens', 'cache_creation_input_tokens')),
+                      'output': u.get('output_tokens'), 'cachedInput': u.get('cache_read_input_tokens'),
+                      'reasoningOutput': None}
+        else:
+            values = {'input': u.get('input_tokens'), 'output': u.get('output_tokens'),
+                      'cachedInput': (u.get('input_tokens_details') or {}).get('cached_tokens'),
+                      'reasoningOutput': (u.get('output_tokens_details') or {}).get('reasoning_tokens')}
+        for key, value in values.items():
+            if value is None:
+                unknown.add(key)
+            else:
+                totals[key] += value
+    return {'requests': len(rows), 'requestsWithUsage': observed,
+            **{k: None if k in unknown or not rows else v for k, v in totals.items()}}
+
+
+class MeterProxy:
+    def __init__(self, base, key):
+        self.rows = []
+        self._lock = threading.Lock()
+        self._sequence = 0
+        outer = self
+        opener = urllib.request.build_opener(NoRedirect)
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_POST(self):
+                if self.path not in ('/v1/chat/completions', '/v1/responses', '/v1/messages'):
+                    self.send_error(404)
+                    return
+                body = self.rfile.read(int(self.headers.get('Content-Length', '0')))
+                try:
+                    obj = json.loads(body)
+                except ValueError:
+                    self.send_error(400)
+                    return
+                headers = {k: v for k, v in self.headers.items()
+                           if k.lower() not in ('authorization', 'x-api-key', 'host', 'connection',
+                                                'content-length', 'accept-encoding')}
+                headers['Authorization'] = 'Bearer ' + key
+                if self.path == '/v1/messages':
+                    headers['x-api-key'] = key
+                # Avoid changing compressed data while observing SSE usage.
+                headers['Accept-Encoding'] = 'identity'
+                request = urllib.request.Request(base.rstrip('/') + self.path.removeprefix('/v1'), data=body, headers=headers)
+                with outer._lock:
+                    outer._sequence += 1
+                    request_id = outer._sequence
+                row = {'request': request_id, 'modelRequested': obj.get('model'),
+                       'bodySha256': hashlib.sha256(body).hexdigest(), 'requestBytes': len(body),
+                       'path': self.path, 'tools': [t.get('name') or (t.get('function') or {}).get('name') for t in obj.get('tools', [])],
+                       'usage': None, 'status': None}
+                started = time.monotonic()
+                meter = ResponseMeter()
+                try:
+                    try:
+                        upstream = opener.open(request, timeout=600)
+                    except urllib.error.HTTPError as e:
+                        upstream = e
+                    with upstream:
+                        meter.sse = 'text/event-stream' in upstream.headers.get('Content-Type', '')
+                        row['status'] = upstream.status
+                        self.send_response(upstream.status)
+                        for k, v in upstream.headers.items():
+                            if k.lower() not in ('transfer-encoding', 'connection', 'content-length'):
+                                self.send_header(k, v)
+                        self.end_headers()
+                        while chunk := upstream.read1(65536):
+                            meter.feed(chunk)
+                            self.wfile.write(chunk)
+                            self.wfile.flush()
+                        meter.finish()
+                except (BrokenPipeError, ConnectionResetError):
+                    row['transportError'] = 'client_disconnected'
+                except Exception as e:
+                    row['transportError'] = type(e).__name__
+                    if row['status'] is None:
+                        self.send_error(502, 'Model connection failed')
+                finally:
+                    row.update(usage=meter.usage, modelReported=meter.model,
+                               elapsedMs=round((time.monotonic() - started) * 1000))
+                    with outer._lock:
+                        outer.rows.append(row)
+
+        self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.server.daemon_threads = True
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.url = f'http://127.0.0.1:{self.server.server_port}/v1'
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join()

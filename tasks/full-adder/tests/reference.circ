@@ -1,0 +1,173 @@
+<?xml version='1.0' encoding='utf-8'?>
+<project source="2.15.0.2.exe" version="1.0">
+  <lib desc="#Wiring" name="0" />
+  <lib desc="#Gates" name="1" />
+  <lib desc="#Plexers" name="2" />
+  <lib desc="#Arithmetic" name="3" />
+  <lib desc="#Memory" name="4" />
+  <lib desc="#I/O" name="5" />
+  <lib desc="#Base" name="6" />
+  <main name="main" />
+  <circuit name="main">
+    <comp lib="0" name="Pin" loc="(300,200)">
+      <a name="width" val="1" />
+      <a name="output" val="false" />
+      <a name="label" val="A" />
+      <a name="facing" val="east" />
+      <a name="tristate" val="false" />
+    </comp>
+    <comp lib="0" name="Pin" loc="(300,320)">
+      <a name="width" val="1" />
+      <a name="output" val="false" />
+      <a name="label" val="B" />
+      <a name="facing" val="east" />
+      <a name="tristate" val="false" />
+    </comp>
+    <comp lib="0" name="Pin" loc="(300,440)">
+      <a name="width" val="1" />
+      <a name="output" val="false" />
+      <a name="label" val="Cin" />
+      <a name="facing" val="east" />
+      <a name="tristate" val="false" />
+    </comp>
+    <comp lib="1" name="XOR Gate" loc="(800,200)">
+      <a name="width" val="1" />
+      <a name="inputs" val="2" />
+      <a name="size" val="30" />
+    </comp>
+    <comp lib="1" name="AND Gate" loc="(800,320)">
+      <a name="width" val="1" />
+      <a name="inputs" val="2" />
+      <a name="size" val="30" />
+    </comp>
+    <comp lib="1" name="XOR Gate" loc="(1300,200)">
+      <a name="width" val="1" />
+      <a name="inputs" val="2" />
+      <a name="size" val="30" />
+    </comp>
+    <comp lib="1" name="AND Gate" loc="(1300,320)">
+      <a name="width" val="1" />
+      <a name="inputs" val="2" />
+      <a name="size" val="30" />
+    </comp>
+    <comp lib="1" name="OR Gate" loc="(1800,200)">
+      <a name="width" val="1" />
+      <a name="inputs" val="2" />
+      <a name="size" val="30" />
+    </comp>
+    <comp lib="0" name="Pin" loc="(2300,200)">
+      <a name="width" val="1" />
+      <a name="output" val="true" />
+      <a name="label" val="Sum" />
+      <a name="facing" val="west" />
+      <a name="tristate" val="false" />
+    </comp>
+    <comp lib="0" name="Pin" loc="(2300,320)">
+      <a name="width" val="1" />
+      <a name="output" val="true" />
+      <a name="label" val="Cout" />
+      <a name="facing" val="west" />
+      <a name="tristate" val="false" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(300,200)">
+      <a name="label" val="A" />
+      <a name="width" val="1" />
+      <a name="facing" val="west" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(800,200)">
+      <a name="label" val="AxB" />
+      <a name="width" val="1" />
+      <a name="facing" val="west" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(760,190)">
+      <a name="label" val="A" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(760,210)">
+      <a name="label" val="B" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1300,200)">
+      <a name="label" val="Sum" />
+      <a name="width" val="1" />
+      <a name="facing" val="west" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1260,190)">
+      <a name="label" val="AxB" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1260,210)">
+      <a name="label" val="Cin" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1800,200)">
+      <a name="label" val="Cout" />
+      <a name="width" val="1" />
+      <a name="facing" val="west" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1770,190)">
+      <a name="label" val="AB" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1770,210)">
+      <a name="label" val="AxBC" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(2300,200)">
+      <a name="label" val="Sum" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(300,320)">
+      <a name="label" val="B" />
+      <a name="width" val="1" />
+      <a name="facing" val="west" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(800,320)">
+      <a name="label" val="AB" />
+      <a name="width" val="1" />
+      <a name="facing" val="west" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(770,310)">
+      <a name="label" val="A" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(770,330)">
+      <a name="label" val="B" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1300,320)">
+      <a name="label" val="AxBC" />
+      <a name="width" val="1" />
+      <a name="facing" val="west" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1270,310)">
+      <a name="label" val="AxB" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(1270,330)">
+      <a name="label" val="Cin" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(2300,320)">
+      <a name="label" val="Cout" />
+      <a name="width" val="1" />
+      <a name="facing" val="east" />
+    </comp>
+    <comp lib="0" name="Tunnel" loc="(300,440)">
+      <a name="label" val="Cin" />
+      <a name="width" val="1" />
+      <a name="facing" val="west" />
+    </comp>
+  </circuit>
+</project>

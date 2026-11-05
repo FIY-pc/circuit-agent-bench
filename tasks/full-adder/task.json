@@ -1,0 +1,6 @@
+{
+  "id": "full-adder",
+  "artifact": "design.circ",
+  "circuit": "main",
+  "timeout_minutes": 15
+}
